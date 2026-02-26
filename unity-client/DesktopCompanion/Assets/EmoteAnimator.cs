@@ -18,8 +18,22 @@ public class EmoteAnimator : MonoBehaviour
     private IdleAnimator idleAnimator;
     private Coroutine gestureLoopRef;
 
+    // --- Context-aware gesture tracking ---
+    private string currentStreamText = "";    // accumulated text from streaming
+    private int lastGestureTextPos = 0;       // position in text when last gesture fired
+    private int lastGestureCategory = -1;     // avoid repeating same category twice
+
     /// <summary> True if a full emote animation is currently playing. </summary>
     public bool IsPlaying => isPlaying;
+
+    /// <summary>
+    /// Update the current streaming text so gestures can be contextual.
+    /// Call from CompanionController as tokens arrive.
+    /// </summary>
+    public void UpdateStreamText(string text)
+    {
+        currentStreamText = text ?? "";
+    }
 
     void Start()
     {
@@ -45,6 +59,9 @@ public class EmoteAnimator : MonoBehaviour
     public void StartTalkingGestures()
     {
         StopTalkingGestures(); // prevent duplicates
+        currentStreamText = "";
+        lastGestureTextPos = 0;
+        lastGestureCategory = -1;
         gestureLoopRef = StartCoroutine(TalkingGestureLoop());
         Debug.Log("EmoteAnimator: Talking gestures STARTED");
     }
@@ -62,7 +79,9 @@ public class EmoteAnimator : MonoBehaviour
         if (isGesturing)
         {
             isGesturing = false;
-            if (poseManager != null) poseManager.ResetToRestPose();
+            // Smooth blend back instead of snapping
+            if (poseManager != null)
+                StartCoroutine(poseManager.SmoothResetToRestPose(0.2f));
             if (idleAnimator != null) idleAnimator.paused = false;
         }
         Debug.Log("EmoteAnimator: Talking gestures STOPPED");
@@ -78,48 +97,209 @@ public class EmoteAnimator : MonoBehaviour
             // Wait if a full emote is currently playing
             while (isPlaying) yield return null;
 
-            // Play a random talking gesture
-            yield return PlayRandomGesture();
+            // Wait until we have enough new text to analyze
+            // (at least ~15 chars since last gesture = ~3 words)
+            while (currentStreamText.Length - lastGestureTextPos < 15)
+            {
+                if (isPlaying) break;
+                yield return null;
+            }
+            if (isPlaying) continue;
 
-            // Random pause between gestures (1.0 - 2.0 seconds)
-            float wait = Random.Range(1.0f, 2.0f);
+            // Play a contextually relevant gesture based on recent text
+            yield return PlayContextualGesture();
+
+            // Shorter pause between gestures (0.6 - 1.4s) for natural rhythm
+            float wait = Random.Range(0.6f, 1.4f);
             float elapsed = 0f;
             while (elapsed < wait)
             {
                 elapsed += Time.deltaTime;
-                // Break early if a full emote needs to play
                 if (isPlaying) break;
                 yield return null;
             }
         }
     }
 
-    IEnumerator PlayRandomGesture()
+    /// <summary>
+    /// Analyze the recent stream text and pick a gesture that matches the content.
+    /// Falls back to a contextually neutral conversational gesture.
+    /// </summary>
+    IEnumerator PlayContextualGesture()
     {
         if (isPlaying || isGesturing) yield break;
 
         isGesturing = true;
         if (idleAnimator != null) idleAnimator.paused = true;
 
-        int pick = Random.Range(0, 10);
-        switch (pick)
+        // Get the new text since our last gesture
+        string recentText = "";
+        if (currentStreamText.Length > lastGestureTextPos)
+            recentText = currentStreamText.Substring(lastGestureTextPos).ToLower();
+        else
+            recentText = currentStreamText.ToLower();
+        lastGestureTextPos = currentStreamText.Length;
+
+        // Determine gesture category from text content
+        // Categories: 0=question, 1=agreement, 2=explanation, 3=self-reference,
+        //             4=uncertainty, 5=excitement, 6=negative, 7=thinking, 8=conversational
+        int category = AnalyzeTextForGesture(recentText);
+
+        // Avoid same category twice in a row — shift to a neighbor
+        if (category == lastGestureCategory)
         {
-            case 0: yield return GestureHeadTilt(); break;
-            case 1: yield return GestureHandRaise(); break;
-            case 2: yield return GestureSmallNod(); break;
-            case 3: yield return GestureLeanForward(); break;
-            case 4: yield return GestureHandOut(); break;
-            case 5: yield return GestureShoulderLift(); break;
-            case 6: yield return GestureHeadTurn(); break;
-            case 7: yield return GestureBothHandsOut(); break;
-            case 8: yield return GestureHandToChest(); break;
-            case 9: yield return GestureBodyShift(); break;
+            category = (category + Random.Range(1, 4)) % 9;
+        }
+        lastGestureCategory = category;
+
+        Debug.Log($"EmoteAnimator: Context gesture cat={category} text='{recentText.Substring(0, Mathf.Min(40, recentText.Length))}'");
+
+        switch (category)
+        {
+            case 0: // Question — head tilt or head turn (curious look)
+                if (Random.value > 0.5f)
+                    yield return GestureHeadTilt();
+                else
+                    yield return GestureHeadTurn();
+                break;
+            case 1: // Agreement/positive — nod or lean forward
+                if (Random.value > 0.5f)
+                    yield return GestureSmallNod();
+                else
+                    yield return GestureLeanForward();
+                break;
+            case 2: // Explaining — hand out or both hands out
+                if (Random.value > 0.5f)
+                    yield return GestureHandOut();
+                else
+                    yield return GestureBothHandsOut();
+                break;
+            case 3: // Self-reference — hand to chest
+                yield return GestureHandToChest();
+                break;
+            case 4: // Uncertainty — shoulder lift or body shift
+                if (Random.value > 0.5f)
+                    yield return GestureShoulderLift();
+                else
+                    yield return GestureBodyShift();
+                break;
+            case 5: // Excitement — hand raise or both hands out
+                if (Random.value > 0.5f)
+                    yield return GestureHandRaise();
+                else
+                    yield return GestureBothHandsOut();
+                break;
+            case 6: // Negative/dismissal — head shake (small) or shoulder lift
+                if (Random.value > 0.5f)
+                    yield return GestureSmallHeadShake();
+                else
+                    yield return GestureShoulderLift();
+                break;
+            case 7: // Thinking/pondering — head tilt + lean
+                if (Random.value > 0.5f)
+                    yield return GestureHeadTilt();
+                else
+                    yield return GestureHandToChest();
+                break;
+            default: // Conversational/neutral — nod, lean, body shift
+                int pick = Random.Range(0, 3);
+                if (pick == 0) yield return GestureSmallNod();
+                else if (pick == 1) yield return GestureLeanForward();
+                else yield return GestureBodyShift();
+                break;
         }
 
-        // Clean up after gesture
-        if (poseManager != null) poseManager.ResetToRestPose();
+        // Smooth cleanup after gesture — blend bones back instead of snapping
+        if (poseManager != null)
+            yield return poseManager.SmoothResetToRestPose(0.2f);
         if (idleAnimator != null) idleAnimator.paused = false;
         isGesturing = false;
+    }
+
+    /// <summary>
+    /// Analyze text content to determine the most appropriate gesture category.
+    /// Returns: 0=question, 1=agreement, 2=explanation, 3=self, 4=uncertainty,
+    ///          5=excitement, 6=negative, 7=thinking, 8=conversational
+    /// </summary>
+    private int AnalyzeTextForGesture(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return 8;
+
+        // Score each category — highest wins
+        int[] scores = new int[9];
+
+        // 0: Question
+        if (text.Contains("?")) scores[0] += 3;
+        if (text.Contains("who") || text.Contains("what") || text.Contains("when")
+            || text.Contains("where") || text.Contains("why") || text.Contains("how")
+            || text.Contains("which") || text.Contains("would you") || text.Contains("do you")
+            || text.Contains("can you") || text.Contains("right?") || text.Contains("know?"))
+            scores[0] += 2;
+
+        // 1: Agreement / positive
+        if (text.Contains("yes") || text.Contains("yeah") || text.Contains("yep")
+            || text.Contains("sure") || text.Contains("right") || text.Contains("agree")
+            || text.Contains("exactly") || text.Contains("correct") || text.Contains("true")
+            || text.Contains("good") || text.Contains("great") || text.Contains("nice")
+            || text.Contains("of course") || text.Contains("definitely") || text.Contains("absolutely"))
+            scores[1] += 2;
+
+        // 2: Explanation
+        if (text.Contains("because") || text.Contains("since") || text.Contains("actually")
+            || text.Contains("basically") || text.Contains("well,") || text.Contains("so,")
+            || text.Contains("let me") || text.Contains("think about") || text.Contains("for example")
+            || text.Contains("the thing is") || text.Contains("here's") || text.Contains("like,")
+            || text.Contains("means") || text.Contains("works") || text.Contains("called"))
+            scores[2] += 2;
+
+        // 3: Self-reference
+        if (text.Contains(" i ") || text.Contains("i'm") || text.Contains("i'll")
+            || text.Contains("my ") || text.Contains("me ") || text.Contains("myself")
+            || text.Contains("i'd") || text.Contains("i've") || text.Contains("personally"))
+            scores[3] += 2;
+
+        // 4: Uncertainty
+        if (text.Contains("maybe") || text.Contains("perhaps") || text.Contains("not sure")
+            || text.Contains("idk") || text.Contains("hmm") || text.Contains("dunno")
+            || text.Contains("probably") || text.Contains("might") || text.Contains("could be")
+            || text.Contains("i guess") || text.Contains("possibly") || text.Contains("kind of"))
+            scores[4] += 2;
+
+        // 5: Excitement
+        if (text.Contains("!") || text.Contains("wow") || text.Contains("oh!")
+            || text.Contains("amazing") || text.Contains("cool") || text.Contains("awesome")
+            || text.Contains("love") || text.Contains("yay") || text.Contains("fun")
+            || text.Contains("omg") || text.Contains("incredible") || text.Contains("haha")
+            || text.Contains("hehe") || text.Contains("excited"))
+            scores[5] += 2;
+
+        // 6: Negative / dismissal
+        if (text.Contains("no") || text.Contains("not") || text.Contains("don't")
+            || text.Contains("can't") || text.Contains("won't") || text.Contains("never")
+            || text.Contains("nah") || text.Contains("nope") || text.Contains("but")
+            || text.Contains("however") || text.Contains("unfortunately") || text.Contains("sadly"))
+            scores[6] += 2;
+
+        // 7: Thinking / pondering
+        if (text.Contains("think") || text.Contains("wonder") || text.Contains("imagine")
+            || text.Contains("consider") || text.Contains("suppose") || text.Contains("ponder")
+            || text.Contains("curious") || text.Contains("interesting") || text.Contains("let me see")
+            || text.Contains("what if"))
+            scores[7] += 2;
+
+        // Find highest scoring category
+        int best = 8;
+        int bestScore = 0;
+        for (int i = 0; i < scores.Length - 1; i++)
+        {
+            if (scores[i] > bestScore)
+            {
+                bestScore = scores[i];
+                best = i;
+            }
+        }
+
+        return best;
     }
 
     // --- Talking Gesture Coroutines (quick, 0.4-0.8s, 2-3 bones each) ---
@@ -131,9 +311,9 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion rest = head.localRotation;
         float dir = Random.value > 0.5f ? 1f : -1f;
         Quaternion tilted = rest * Quaternion.Euler(0f, 0f, 18f * dir);
-        yield return RotateBoneOverTime(head, rest, tilted, 0.2f);
-        yield return new WaitForSeconds(0.25f);
-        yield return RotateBoneOverTime(head, tilted, rest, 0.2f);
+        yield return RotateBoneOverTime(head, rest, tilted, 0.3f);
+        yield return new WaitForSeconds(0.3f);
+        yield return RotateBoneOverTime(head, tilted, rest, 0.3f);
     }
 
     IEnumerator GestureHandRaise()
@@ -153,13 +333,14 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion lBent = lRest * Quaternion.Euler(-45f, 0f, 0f);
         Quaternion hTilt = hRest * Quaternion.Euler(0f, 0f, 15f * side);
 
-        yield return RotateBoneOverTime(arm, aRest, aUp, 0.2f);
-        if (lower != null) lower.localRotation = lBent;
-        if (hand != null) hand.localRotation = hTilt;
+        // Raise arm smoothly, then smoothly bend elbow and tilt hand
+        yield return RotateBoneOverTime(arm, aRest, aUp, 0.3f);
+        if (lower != null) yield return RotateBoneOverTime(lower, lRest, lBent, 0.18f);
+        if (hand != null) yield return RotateBoneOverTime(hand, hRest, hTilt, 0.12f);
         yield return new WaitForSeconds(0.3f);
-        if (lower != null) lower.localRotation = lRest;
-        if (hand != null) hand.localRotation = hRest;
-        yield return RotateBoneOverTime(arm, aUp, aRest, 0.2f);
+        if (hand != null) yield return RotateBoneOverTime(hand, hTilt, hRest, 0.12f);
+        if (lower != null) yield return RotateBoneOverTime(lower, lBent, lRest, 0.18f);
+        yield return RotateBoneOverTime(arm, aUp, aRest, 0.3f);
     }
 
     IEnumerator GestureSmallNod()
@@ -170,14 +351,19 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion hRest = head.localRotation;
         Quaternion sRest = spine != null ? spine.localRotation : Quaternion.identity;
 
+        // Lean spine in smoothly
+        Quaternion sLean = sRest * Quaternion.Euler(3f, 0f, 0f);
+        if (spine != null) yield return RotateBoneOverTime(spine, sRest, sLean, 0.12f);
+
         for (int i = 0; i < 2; i++)
         {
             Quaternion down = hRest * Quaternion.Euler(15f, 0f, 0f);
-            if (spine != null) spine.localRotation = sRest * Quaternion.Euler(3f, 0f, 0f);
-            yield return RotateBoneOverTime(head, hRest, down, 0.1f);
-            yield return RotateBoneOverTime(head, down, hRest, 0.1f);
-            if (spine != null) spine.localRotation = sRest;
+            yield return RotateBoneOverTime(head, hRest, down, 0.14f);
+            yield return RotateBoneOverTime(head, down, hRest, 0.14f);
         }
+
+        // Lean spine back out smoothly
+        if (spine != null) yield return RotateBoneOverTime(spine, sLean, sRest, 0.12f);
     }
 
     IEnumerator GestureLeanForward()
@@ -191,11 +377,11 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion sLean = sRest * Quaternion.Euler(12f, 0f, 0f);
         Quaternion hUp = hRest * Quaternion.Euler(-8f, 0f, 0f);
 
-        yield return RotateBoneOverTime(spine, sRest, sLean, 0.2f);
-        if (head != null) head.localRotation = hUp;
+        yield return RotateBoneOverTime(spine, sRest, sLean, 0.28f);
+        if (head != null) yield return RotateBoneOverTime(head, hRest, hUp, 0.15f);
         yield return new WaitForSeconds(0.3f);
-        if (head != null) head.localRotation = hRest;
-        yield return RotateBoneOverTime(spine, sLean, sRest, 0.2f);
+        if (head != null) yield return RotateBoneOverTime(head, hUp, hRest, 0.15f);
+        yield return RotateBoneOverTime(spine, sLean, sRest, 0.28f);
     }
 
     IEnumerator GestureHandOut()
@@ -216,13 +402,14 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion lStraight = lRest * Quaternion.Euler(-20f, 0f, 0f);
         Quaternion hFlat = hRest * Quaternion.Euler(-25f, 0f, 0f);
 
-        yield return RotateBoneOverTime(arm, aRest, aOut, 0.18f);
-        if (lower != null) lower.localRotation = lStraight;
-        if (hand != null) hand.localRotation = hFlat;
+        // Smooth raise with elbow and hand following
+        yield return RotateBoneOverTime(arm, aRest, aOut, 0.28f);
+        if (lower != null) yield return RotateBoneOverTime(lower, lRest, lStraight, 0.15f);
+        if (hand != null) yield return RotateBoneOverTime(hand, hRest, hFlat, 0.12f);
         yield return new WaitForSeconds(0.35f);
-        if (lower != null) lower.localRotation = lRest;
-        if (hand != null) hand.localRotation = hRest;
-        yield return RotateBoneOverTime(arm, aOut, aRest, 0.18f);
+        if (hand != null) yield return RotateBoneOverTime(hand, hFlat, hRest, 0.12f);
+        if (lower != null) yield return RotateBoneOverTime(lower, lStraight, lRest, 0.15f);
+        yield return RotateBoneOverTime(arm, aOut, aRest, 0.28f);
     }
 
     IEnumerator GestureShoulderLift()
@@ -240,15 +427,17 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion rLift = rRest * Quaternion.Euler(-12f, 0f, 8f);
         Quaternion hTilt = hRest * Quaternion.Euler(0f, 0f, 8f);
 
-        leftArm.localRotation = lLift;
-        rightArm.localRotation = rLift;
-        if (head != null) head.localRotation = hTilt;
-        yield return MoveOverTime(Vector3.up, 0.02f, 0.1f);
+        // Smooth lift
+        yield return RotateBoneOverTime(leftArm, lRest, lLift, 0.18f);
+        yield return RotateBoneOverTime(rightArm, rRest, rLift, 0.12f);
+        if (head != null) yield return RotateBoneOverTime(head, hRest, hTilt, 0.1f);
+        yield return MoveOverTime(Vector3.up, 0.02f, 0.12f);
         yield return new WaitForSeconds(0.25f);
         yield return MoveOverTime(Vector3.up, -0.02f, 0.15f);
-        leftArm.localRotation = lRest;
-        rightArm.localRotation = rRest;
-        if (head != null) head.localRotation = hRest;
+        // Smooth return
+        if (head != null) yield return RotateBoneOverTime(head, hTilt, hRest, 0.1f);
+        yield return RotateBoneOverTime(rightArm, rLift, rRest, 0.12f);
+        yield return RotateBoneOverTime(leftArm, lLift, lRest, 0.18f);
     }
 
     IEnumerator GestureHeadTurn()
@@ -263,11 +452,11 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion hTurn = hRest * Quaternion.Euler(0f, 22f * dir, 0f);
         Quaternion sTurn = sRest * Quaternion.Euler(0f, 5f * dir, 0f);
 
-        yield return RotateBoneOverTime(head, hRest, hTurn, 0.2f);
-        if (spine != null) spine.localRotation = sTurn;
-        yield return new WaitForSeconds(0.3f);
-        if (spine != null) spine.localRotation = sRest;
-        yield return RotateBoneOverTime(head, hTurn, hRest, 0.25f);
+        yield return RotateBoneOverTime(head, hRest, hTurn, 0.3f);
+        if (spine != null) yield return RotateBoneOverTime(spine, sRest, sTurn, 0.15f);
+        yield return new WaitForSeconds(0.35f);
+        if (spine != null) yield return RotateBoneOverTime(spine, sTurn, sRest, 0.15f);
+        yield return RotateBoneOverTime(head, hTurn, hRest, 0.35f);
     }
 
     IEnumerator GestureBothHandsOut()
@@ -295,21 +484,24 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion lhUp = lhRest * Quaternion.Euler(-20f, 0f, 0f);
         Quaternion rhUp = rhRest * Quaternion.Euler(-20f, 0f, 0f);
 
-        yield return RotateBoneOverTime(leftArm, lRest, lOut, 0.18f);
-        rightArm.localRotation = rOut;
-        if (leftLower != null) leftLower.localRotation = llBent;
-        if (rightLower != null) rightLower.localRotation = rlBent;
+        // Smoothly raise both arms together
+        yield return RotateBoneOverTime(leftArm, lRest, lOut, 0.25f);
+        yield return RotateBoneOverTime(rightArm, rRest, rOut, 0.15f);
+        // Smoothly bend elbows
+        if (leftLower != null) yield return RotateBoneOverTime(leftLower, llRest, llBent, 0.12f);
+        if (rightLower != null) yield return RotateBoneOverTime(rightLower, rlRest, rlBent, 0.1f);
         if (leftHand != null) leftHand.localRotation = lhUp;
         if (rightHand != null) rightHand.localRotation = rhUp;
 
         yield return new WaitForSeconds(0.35f);
 
-        if (leftLower != null) leftLower.localRotation = llRest;
-        if (rightLower != null) rightLower.localRotation = rlRest;
+        // Smoothly return
         if (leftHand != null) leftHand.localRotation = lhRest;
         if (rightHand != null) rightHand.localRotation = rhRest;
-        yield return RotateBoneOverTime(leftArm, lOut, lRest, 0.18f);
-        rightArm.localRotation = rRest;
+        if (leftLower != null) yield return RotateBoneOverTime(leftLower, llBent, llRest, 0.12f);
+        if (rightLower != null) yield return RotateBoneOverTime(rightLower, rlBent, rlRest, 0.1f);
+        yield return RotateBoneOverTime(rightArm, rOut, rRest, 0.15f);
+        yield return RotateBoneOverTime(leftArm, lOut, lRest, 0.25f);
     }
 
     IEnumerator GestureHandToChest()
@@ -326,11 +518,12 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion aChest = aRest * Quaternion.Euler(-25f, 15f * side, 10f * side);
         Quaternion lBent = lRest * Quaternion.Euler(-60f, 0f, 0f);
 
-        yield return RotateBoneOverTime(arm, aRest, aChest, 0.2f);
-        if (lower != null) lower.localRotation = lBent;
+        // Smooth arm raise then smooth elbow bend
+        yield return RotateBoneOverTime(arm, aRest, aChest, 0.28f);
+        if (lower != null) yield return RotateBoneOverTime(lower, lRest, lBent, 0.2f);
         yield return new WaitForSeconds(0.3f);
-        if (lower != null) lower.localRotation = lRest;
-        yield return RotateBoneOverTime(arm, aChest, aRest, 0.2f);
+        if (lower != null) yield return RotateBoneOverTime(lower, lBent, lRest, 0.2f);
+        yield return RotateBoneOverTime(arm, aChest, aRest, 0.28f);
     }
 
     IEnumerator GestureBodyShift()
@@ -349,13 +542,32 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion hipShift = hipRest * Quaternion.Euler(0f, 4f * dir, 0f);
         Quaternion hCompensate = hRest * Quaternion.Euler(0f, 0f, -5f * dir);
 
-        spine.localRotation = sShift;
-        if (hips != null) hips.localRotation = hipShift;
-        if (head != null) head.localRotation = hCompensate;
-        yield return new WaitForSeconds(0.5f);
-        spine.localRotation = sRest;
-        if (hips != null) hips.localRotation = hipRest;
-        if (head != null) head.localRotation = hRest;
+        // Smooth shift in
+        yield return RotateBoneOverTime(spine, sRest, sShift, 0.22f);
+        if (hips != null) yield return RotateBoneOverTime(hips, hipRest, hipShift, 0.12f);
+        if (head != null) yield return RotateBoneOverTime(head, hRest, hCompensate, 0.1f);
+        yield return new WaitForSeconds(0.4f);
+        // Smooth shift back
+        if (head != null) yield return RotateBoneOverTime(head, hCompensate, hRest, 0.1f);
+        if (hips != null) yield return RotateBoneOverTime(hips, hipShift, hipRest, 0.12f);
+        yield return RotateBoneOverTime(spine, sShift, sRest, 0.22f);
+    }
+
+    /// <summary> Quick small head shake — for disagreement/negation during speech </summary>
+    IEnumerator GestureSmallHeadShake()
+    {
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
+        if (head == null) yield break;
+        Quaternion rest = head.localRotation;
+
+        for (int i = 0; i < 2; i++)
+        {
+            Quaternion left = rest * Quaternion.Euler(0f, -15f, 0f);
+            Quaternion right = rest * Quaternion.Euler(0f, 15f, 0f);
+            yield return RotateBoneOverTime(head, rest, left, 0.08f);
+            yield return RotateBoneOverTime(head, left, right, 0.16f);
+            yield return RotateBoneOverTime(head, right, rest, 0.08f);
+        }
     }
 
     // ===================== Full Emote System =====================
@@ -743,7 +955,7 @@ public class EmoteAnimator : MonoBehaviour
         Transform rightHand = poseManager?.GetBone(HumanBodyBones.RightHand);
 
         float bounceHeight = 0.12f;
-        float speed = 0.08f;
+        float speed = 0.1f;
 
         Quaternion headRest = head != null ? head.localRotation : Quaternion.identity;
         Quaternion spineRest = spine != null ? spine.localRotation : Quaternion.identity;
@@ -754,32 +966,44 @@ public class EmoteAnimator : MonoBehaviour
 
         for (int i = 0; i < 5; i++)
         {
-            // Bounce body up
-            yield return MoveOverTime(Vector3.up, bounceHeight, speed);
-            // Head, spine, arms all move at peak
-            if (head != null)
-                head.localRotation = headRest * Quaternion.Euler(-15f, (i % 2 == 0 ? 10f : -10f), (i % 2 == 0 ? 8f : -8f));
-            if (spine != null)
-                spine.localRotation = spineRest * Quaternion.Euler(-6f, 0f, (i % 2 == 0 ? 8f : -8f));
-            // Arms flap out on each bounce
-            if (leftArm != null)
-                leftArm.localRotation = lArmRest * Quaternion.Euler(-25f, 0f, -20f);
-            if (rightArm != null)
-                rightArm.localRotation = rArmRest * Quaternion.Euler(-25f, 0f, 20f);
-            if (leftHand != null)
-                leftHand.localRotation = lHandRest * Quaternion.Euler(0f, 0f, 20f);
-            if (rightHand != null)
-                rightHand.localRotation = rHandRest * Quaternion.Euler(0f, 0f, -20f);
+            // Target rotations for this bounce (alternating sides)
+            Quaternion headTarget = headRest * Quaternion.Euler(-15f, (i % 2 == 0 ? 10f : -10f), (i % 2 == 0 ? 8f : -8f));
+            Quaternion spineTarget = spineRest * Quaternion.Euler(-6f, 0f, (i % 2 == 0 ? 8f : -8f));
+            Quaternion lArmTarget = lArmRest * Quaternion.Euler(-25f, 0f, -20f);
+            Quaternion rArmTarget = rArmRest * Quaternion.Euler(-25f, 0f, 20f);
 
-            // Bounce back down
-            yield return MoveOverTime(Vector3.up, -bounceHeight, speed);
-            // Return arms in
-            if (head != null) head.localRotation = headRest;
-            if (spine != null) spine.localRotation = spineRest;
-            if (leftArm != null) leftArm.localRotation = lArmRest;
-            if (rightArm != null) rightArm.localRotation = rArmRest;
-            if (leftHand != null) leftHand.localRotation = lHandRest;
-            if (rightHand != null) rightHand.localRotation = rHandRest;
+            // Bounce up while smoothly blending bones to peak pose
+            float upElapsed = 0f;
+            Vector3 upStart = transform.localPosition;
+            Vector3 upEnd = upStart + Vector3.up * bounceHeight;
+            while (upElapsed < speed)
+            {
+                upElapsed += Time.deltaTime;
+                float t = Mathf.SmoothStep(0f, 1f, upElapsed / speed);
+                transform.localPosition = Vector3.Lerp(upStart, upEnd, t);
+                // Blend bones in parallel
+                if (head != null) head.localRotation = Quaternion.Slerp(headRest, headTarget, t);
+                if (spine != null) spine.localRotation = Quaternion.Slerp(spineRest, spineTarget, t);
+                if (leftArm != null) leftArm.localRotation = Quaternion.Slerp(lArmRest, lArmTarget, t);
+                if (rightArm != null) rightArm.localRotation = Quaternion.Slerp(rArmRest, rArmTarget, t);
+                yield return null;
+            }
+
+            // Bounce down while smoothly blending bones back to rest
+            float downElapsed = 0f;
+            Vector3 downStart = transform.localPosition;
+            Vector3 downEnd = downStart - Vector3.up * bounceHeight;
+            while (downElapsed < speed)
+            {
+                downElapsed += Time.deltaTime;
+                float t = Mathf.SmoothStep(0f, 1f, downElapsed / speed);
+                transform.localPosition = Vector3.Lerp(downStart, downEnd, t);
+                if (head != null) head.localRotation = Quaternion.Slerp(headTarget, headRest, t);
+                if (spine != null) spine.localRotation = Quaternion.Slerp(spineTarget, spineRest, t);
+                if (leftArm != null) leftArm.localRotation = Quaternion.Slerp(lArmTarget, lArmRest, t);
+                if (rightArm != null) rightArm.localRotation = Quaternion.Slerp(rArmTarget, rArmRest, t);
+                yield return null;
+            }
         }
 
         ResetState();
@@ -815,27 +1039,23 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion lhDangle = lhRest * Quaternion.Euler(20f, 0f, 0f);
         Quaternion rhDangle = rhRest * Quaternion.Euler(20f, 0f, 0f);
 
-        // Sink down + deflate scale + all bones slump
+        // Sink down + deflate scale + all bones slump smoothly
         float shrink = 0.88f;
         yield return ScaleOverTime(originalScale * shrink, 0.4f);
         if (spine != null) yield return RotateBoneOverTime(spine, sRest, sCurl, 0.3f);
-        if (chest != null) chest.localRotation = cCave;
+        if (chest != null) yield return RotateBoneOverTime(chest, cRest, cCave, 0.15f);
         if (head != null) yield return RotateBoneOverTime(head, hRest, hDrop, 0.25f);
-        if (leftArm != null) leftArm.localRotation = lDroop;
-        if (rightArm != null) rightArm.localRotation = rDroop;
-        if (leftHand != null) leftHand.localRotation = lhDangle;
-        if (rightHand != null) rightHand.localRotation = rhDangle;
+        if (leftArm != null) yield return RotateBoneOverTime(leftArm, lRest, lDroop, 0.15f);
+        if (rightArm != null) yield return RotateBoneOverTime(rightArm, rRest, rDroop, 0.12f);
 
         yield return new WaitForSeconds(0.8f);
 
-        // Recover
+        // Recover smoothly
+        if (leftArm != null) yield return RotateBoneOverTime(leftArm, lDroop, lRest, 0.15f);
+        if (rightArm != null) yield return RotateBoneOverTime(rightArm, rDroop, rRest, 0.12f);
         if (head != null) yield return RotateBoneOverTime(head, hDrop, hRest, 0.3f);
+        if (chest != null) yield return RotateBoneOverTime(chest, cCave, cRest, 0.15f);
         if (spine != null) yield return RotateBoneOverTime(spine, sCurl, sRest, 0.3f);
-        if (chest != null) chest.localRotation = cRest;
-        if (leftArm != null) leftArm.localRotation = lRest;
-        if (rightArm != null) rightArm.localRotation = rRest;
-        if (leftHand != null) leftHand.localRotation = lhRest;
-        if (rightHand != null) rightHand.localRotation = rhRest;
         yield return ScaleOverTime(originalScale, 0.4f);
 
         ResetState();
@@ -864,19 +1084,19 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion sArch = sRest * Quaternion.Euler(-8f, 0f, 0f);
             Quaternion hBack = hRest * Quaternion.Euler(-10f, 0f, 0f);
 
-            // Raise arms
+            // Raise arms smoothly
             yield return RotateBoneOverTime(leftArm, lRest, lUp, 0.35f);
-            if (rightArm != null) rightArm.localRotation = rUp; // snap other arm
+            yield return RotateBoneOverTime(rightArm, rRest, rUp, 0.2f);
             if (spine != null) yield return RotateBoneOverTime(spine, sRest, sArch, 0.2f);
-            if (head != null) head.localRotation = hBack;
+            if (head != null) yield return RotateBoneOverTime(head, hRest, hBack, 0.15f);
 
             yield return new WaitForSeconds(0.6f);
 
-            // Lower back
+            // Lower back smoothly
             if (head != null) yield return RotateBoneOverTime(head, hBack, hRest, 0.2f);
             if (spine != null) yield return RotateBoneOverTime(spine, sArch, sRest, 0.2f);
+            yield return RotateBoneOverTime(rightArm, rUp, rRest, 0.2f);
             yield return RotateBoneOverTime(leftArm, lUp, lRest, 0.35f);
-            if (rightArm != null) rightArm.localRotation = rRest;
         }
         else
         {
@@ -923,22 +1143,38 @@ public class EmoteAnimator : MonoBehaviour
         {
             // Crouch (prep)
             yield return MoveOverTime(Vector3.up, -0.04f, 0.04f);
-            // Jump up + arms raise + head back
-            yield return MoveOverTime(Vector3.up, jumpHeight + 0.04f, upSpeed);
-            if (leftArm != null) leftArm.localRotation = lUp;
-            if (rightArm != null) rightArm.localRotation = rUp;
-            if (leftLower != null) leftLower.localRotation = llRest * Quaternion.Euler(-15f, 0f, 0f);
-            if (rightLower != null) rightLower.localRotation = rlRest * Quaternion.Euler(-15f, 0f, 0f);
-            if (head != null) head.localRotation = hBack;
-            if (spine != null) spine.localRotation = sArch;
-            // Fall down + arms return
-            yield return MoveOverTime(Vector3.up, -jumpHeight, downSpeed);
-            if (leftArm != null) leftArm.localRotation = lRest;
-            if (rightArm != null) rightArm.localRotation = rRest;
-            if (leftLower != null) leftLower.localRotation = llRest;
-            if (rightLower != null) rightLower.localRotation = rlRest;
-            if (head != null) head.localRotation = hRest;
-            if (spine != null) spine.localRotation = sRest;
+
+            // Jump up while smoothly raising arms
+            float upElapsed = 0f;
+            Vector3 upStart = transform.localPosition;
+            Vector3 upEnd = upStart + Vector3.up * (jumpHeight + 0.04f);
+            while (upElapsed < upSpeed)
+            {
+                upElapsed += Time.deltaTime;
+                float t = Mathf.SmoothStep(0f, 1f, upElapsed / upSpeed);
+                transform.localPosition = Vector3.Lerp(upStart, upEnd, t);
+                if (leftArm != null) leftArm.localRotation = Quaternion.Slerp(lRest, lUp, t);
+                if (rightArm != null) rightArm.localRotation = Quaternion.Slerp(rRest, rUp, t);
+                if (head != null) head.localRotation = Quaternion.Slerp(hRest, hBack, t);
+                if (spine != null) spine.localRotation = Quaternion.Slerp(sRest, sArch, t);
+                yield return null;
+            }
+
+            // Fall down while smoothly returning bones
+            float downElapsed = 0f;
+            Vector3 downStart = transform.localPosition;
+            Vector3 downEnd = downStart - Vector3.up * jumpHeight;
+            while (downElapsed < downSpeed)
+            {
+                downElapsed += Time.deltaTime;
+                float t = Mathf.SmoothStep(0f, 1f, downElapsed / downSpeed);
+                transform.localPosition = Vector3.Lerp(downStart, downEnd, t);
+                if (leftArm != null) leftArm.localRotation = Quaternion.Slerp(lUp, lRest, t);
+                if (rightArm != null) rightArm.localRotation = Quaternion.Slerp(rUp, rRest, t);
+                if (head != null) head.localRotation = Quaternion.Slerp(hBack, hRest, t);
+                if (spine != null) spine.localRotation = Quaternion.Slerp(sArch, sRest, t);
+                yield return null;
+            }
         }
 
         ResetState();
@@ -1171,51 +1407,58 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion lhRest = leftHand != null ? leftHand.localRotation : Quaternion.identity;
         Quaternion rhRest = rightHand != null ? rightHand.localRotation : Quaternion.identity;
 
-        float beatTime = 0.18f;
+        float beatTime = 0.22f;
         float bounceHeight = 0.10f;
 
         for (int i = 0; i < 8; i++)
         {
             float dir = (i % 2 == 0) ? 1f : -1f;
 
-            // Spine sway + head bob + arms pump alternating
-            if (spine != null) spine.localRotation = sRest * Quaternion.Euler(-5f, 8f * dir, 15f * dir);
-            if (head != null) head.localRotation = hRest * Quaternion.Euler(-8f, -5f * dir, 10f * dir);
+            // Target poses for this beat
+            Quaternion sTarget = sRest * Quaternion.Euler(-5f, 8f * dir, 15f * dir);
+            Quaternion hTarget = hRest * Quaternion.Euler(-8f, -5f * dir, 10f * dir);
+            Quaternion lArmTarget, rArmTarget, llTarget, rlTarget;
 
-            // One arm up, one arm down — alternating pump
             if (i % 2 == 0)
             {
-                if (leftArm != null) leftArm.localRotation = lRest * Quaternion.Euler(-60f, 0f, 15f);
-                if (leftLower != null) leftLower.localRotation = llRest * Quaternion.Euler(-70f, 0f, 0f);
-                if (rightArm != null) rightArm.localRotation = rRest * Quaternion.Euler(-15f, 0f, -8f);
-                if (rightLower != null) rightLower.localRotation = rlRest * Quaternion.Euler(-20f, 0f, 0f);
+                lArmTarget = lRest * Quaternion.Euler(-60f, 0f, 15f);
+                llTarget = llRest * Quaternion.Euler(-70f, 0f, 0f);
+                rArmTarget = rRest * Quaternion.Euler(-15f, 0f, -8f);
+                rlTarget = rlRest * Quaternion.Euler(-20f, 0f, 0f);
             }
             else
             {
-                if (rightArm != null) rightArm.localRotation = rRest * Quaternion.Euler(-60f, 0f, -15f);
-                if (rightLower != null) rightLower.localRotation = rlRest * Quaternion.Euler(-70f, 0f, 0f);
-                if (leftArm != null) leftArm.localRotation = lRest * Quaternion.Euler(-15f, 0f, 8f);
-                if (leftLower != null) leftLower.localRotation = llRest * Quaternion.Euler(-20f, 0f, 0f);
+                rArmTarget = rRest * Quaternion.Euler(-60f, 0f, -15f);
+                rlTarget = rlRest * Quaternion.Euler(-70f, 0f, 0f);
+                lArmTarget = lRest * Quaternion.Euler(-15f, 0f, 8f);
+                llTarget = llRest * Quaternion.Euler(-20f, 0f, 0f);
             }
 
-            // Hands wiggle
-            if (leftHand != null) leftHand.localRotation = lhRest * Quaternion.Euler(0f, 0f, 20f * dir);
-            if (rightHand != null) rightHand.localRotation = rhRest * Quaternion.Euler(0f, 0f, -20f * dir);
+            // Blend all bones to beat pose while bouncing up
+            float upElapsed = 0f;
+            Vector3 upStart = transform.localPosition;
+            Vector3 upEnd = upStart + Vector3.up * bounceHeight;
+            float halfBeat = beatTime * 0.5f;
+            while (upElapsed < halfBeat)
+            {
+                upElapsed += Time.deltaTime;
+                float t = Mathf.SmoothStep(0f, 1f, upElapsed / halfBeat);
+                transform.localPosition = Vector3.Lerp(upStart, upEnd, t);
+                if (spine != null) spine.localRotation = Quaternion.Slerp(spine.localRotation, sTarget, t * 0.5f + 0.5f);
+                if (head != null) head.localRotation = Quaternion.Slerp(head.localRotation, hTarget, t * 0.5f + 0.5f);
+                if (leftArm != null) leftArm.localRotation = Quaternion.Slerp(leftArm.localRotation, lArmTarget, t * 0.5f + 0.5f);
+                if (rightArm != null) rightArm.localRotation = Quaternion.Slerp(rightArm.localRotation, rArmTarget, t * 0.5f + 0.5f);
+                if (leftLower != null) leftLower.localRotation = Quaternion.Slerp(leftLower.localRotation, llTarget, t * 0.5f + 0.5f);
+                if (rightLower != null) rightLower.localRotation = Quaternion.Slerp(rightLower.localRotation, rlTarget, t * 0.5f + 0.5f);
+                yield return null;
+            }
 
-            // Bounce
-            yield return MoveOverTime(Vector3.up, bounceHeight, beatTime * 0.5f);
-            yield return MoveOverTime(Vector3.up, -bounceHeight, beatTime * 0.5f);
+            // Bounce down
+            yield return MoveOverTime(Vector3.up, -bounceHeight, halfBeat);
         }
 
-        // Reset all bones
-        if (head != null) head.localRotation = hRest;
-        if (spine != null) spine.localRotation = sRest;
-        if (leftArm != null) leftArm.localRotation = lRest;
-        if (rightArm != null) rightArm.localRotation = rRest;
-        if (leftLower != null) leftLower.localRotation = llRest;
-        if (rightLower != null) rightLower.localRotation = rlRest;
-        if (leftHand != null) leftHand.localRotation = lhRest;
-        if (rightHand != null) rightHand.localRotation = rhRest;
+        // Smooth return instead of snapping all bones at once
+        // ResetState handles this smoothly now
 
         ResetState();
     }
@@ -1720,20 +1963,20 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion rlBent = rlRest * Quaternion.Euler(-80f, 0f, 0f);
             Quaternion hTilt = hRest * Quaternion.Euler(0f, 0f, -6f);
 
-            yield return RotateBoneOverTime(leftArm, lRest, lCross, 0.25f);
-            rightArm.localRotation = rCross;
-            if (leftLower != null) leftLower.localRotation = llBent;
-            if (rightLower != null) rightLower.localRotation = rlBent;
+            yield return RotateBoneOverTime(leftArm, lRest, lCross, 0.3f);
+            yield return RotateBoneOverTime(rightArm, rRest, rCross, 0.2f);
+            if (leftLower != null) yield return RotateBoneOverTime(leftLower, llRest, llBent, 0.15f);
+            if (rightLower != null) yield return RotateBoneOverTime(rightLower, rlRest, rlBent, 0.12f);
             if (head != null) yield return RotateBoneOverTime(head, hRest, hTilt, 0.15f);
 
             yield return new WaitForSeconds(0.8f);
 
             // Uncross
             if (head != null) yield return RotateBoneOverTime(head, hTilt, hRest, 0.15f);
-            yield return RotateBoneOverTime(leftArm, lCross, lRest, 0.25f);
-            rightArm.localRotation = rRest;
-            if (leftLower != null) leftLower.localRotation = llRest;
-            if (rightLower != null) rightLower.localRotation = rlRest;
+            if (leftLower != null) yield return RotateBoneOverTime(leftLower, llBent, llRest, 0.12f);
+            if (rightLower != null) yield return RotateBoneOverTime(rightLower, rlBent, rlRest, 0.12f);
+            yield return RotateBoneOverTime(rightArm, rCross, rRest, 0.2f);
+            yield return RotateBoneOverTime(leftArm, lCross, lRest, 0.3f);
         }
         else
         {
@@ -1771,11 +2014,11 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion rlStr = rlRest * Quaternion.Euler(-10f, 0f, 0f);
             Quaternion sArch = sRest * Quaternion.Euler(-5f, 0f, 0f);
 
-            yield return RotateBoneOverTime(leftArm, lRest, lUp, 0.25f);
-            rightArm.localRotation = rUp;
-            if (leftLower != null) leftLower.localRotation = llStr;
-            if (rightLower != null) rightLower.localRotation = rlStr;
-            if (spine != null) spine.localRotation = sArch;
+            yield return RotateBoneOverTime(leftArm, lRest, lUp, 0.3f);
+            yield return RotateBoneOverTime(rightArm, rRest, rUp, 0.2f);
+            if (leftLower != null) yield return RotateBoneOverTime(leftLower, llRest, llStr, 0.12f);
+            if (rightLower != null) yield return RotateBoneOverTime(rightLower, rlRest, rlStr, 0.1f);
+            if (spine != null) yield return RotateBoneOverTime(spine, sRest, sArch, 0.12f);
 
             // Victory bounces
             for (int i = 0; i < 3; i++)
@@ -1784,12 +2027,12 @@ public class EmoteAnimator : MonoBehaviour
                 yield return MoveOverTime(Vector3.up, -0.08f, 0.08f);
             }
 
-            // Lower arms
-            if (spine != null) spine.localRotation = sRest;
+            // Lower arms smoothly
+            if (spine != null) yield return RotateBoneOverTime(spine, sArch, sRest, 0.15f);
+            if (leftLower != null) yield return RotateBoneOverTime(leftLower, llStr, llRest, 0.1f);
+            if (rightLower != null) yield return RotateBoneOverTime(rightLower, rlStr, rlRest, 0.1f);
+            yield return RotateBoneOverTime(rightArm, rUp, rRest, 0.2f);
             yield return RotateBoneOverTime(leftArm, lUp, lRest, 0.3f);
-            rightArm.localRotation = rRest;
-            if (leftLower != null) leftLower.localRotation = llRest;
-            if (rightLower != null) rightLower.localRotation = rlRest;
         }
         else
         {
@@ -1869,20 +2112,49 @@ public class EmoteAnimator : MonoBehaviour
 
     private void ResetState()
     {
+        // Use smooth reset — starts a coroutine that blends everything back
+        StartCoroutine(SmoothResetState(0.3f));
+    }
+
+    /// <summary>
+    /// Smoothly blend transform + bones back to rest over the given duration.
+    /// Much more fluid than snapping everything in one frame.
+    /// </summary>
+    private IEnumerator SmoothResetState(float duration)
+    {
+        // Snapshot current transform values
+        Vector3 startPos = transform.localPosition;
+        Quaternion startRot = transform.localRotation;
+        Vector3 startScale = transform.localScale;
+
+        // Start smooth bone reset in parallel
+        Coroutine boneReset = null;
+        if (poseManager != null)
+            boneReset = StartCoroutine(poseManager.SmoothResetToRestPose(duration));
+
+        // Blend transform back
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+            transform.localPosition = Vector3.Lerp(startPos, originalPos, t);
+            transform.localRotation = Quaternion.Slerp(startRot, originalRot, t);
+            transform.localScale = Vector3.Lerp(startScale, originalScale, t);
+            yield return null;
+        }
+
+        // Ensure exact final values
         transform.localPosition = originalPos;
         transform.localRotation = originalRot;
         transform.localScale = originalScale;
 
-        // Reset any bone animations back to the rest pose
-        if (poseManager != null)
-            poseManager.ResetToRestPose();
-
-        // Resume idle bone animations (gesture loop will re-pause if needed)
+        // Resume idle bone animations (blend weight handles smooth transition)
         if (idleAnimator != null)
             idleAnimator.paused = false;
 
         isPlaying = false;
-        Debug.Log("EmoteAnimator: Full emote finished, isPlaying = false");
+        Debug.Log("EmoteAnimator: Full emote finished (smooth), isPlaying = false");
     }
 
     // --- Additional Dramatic Animations ---

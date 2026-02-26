@@ -34,6 +34,10 @@ public class IdleAnimator : MonoBehaviour
     public float armSwayAmount = 2f;     // degrees
     public float armSwaySpeed = 0.8f;
 
+    [Header("Elbow Movement")]
+    public float elbowFlexAmount = 6f;   // degrees
+    public float elbowFlexSpeed = 0.55f;
+
     private Vector3 startPos;
     private float baseScale = 1f;
 
@@ -44,6 +48,8 @@ public class IdleAnimator : MonoBehaviour
     private Transform hipsBone;
     private Transform leftUpperArm;
     private Transform rightUpperArm;
+    private Transform leftLowerArm;
+    private Transform rightLowerArm;
     private Transform leftHand;
     private Transform rightHand;
 
@@ -53,6 +59,8 @@ public class IdleAnimator : MonoBehaviour
     private Quaternion hipsRest;
     private Quaternion leftArmRest;
     private Quaternion rightArmRest;
+    private Quaternion leftLowerArmRest;
+    private Quaternion rightLowerArmRest;
     private Quaternion leftHandRest;
     private Quaternion rightHandRest;
 
@@ -63,6 +71,11 @@ public class IdleAnimator : MonoBehaviour
     /// Transform-level bob/breathe still runs for subtle aliveness.
     /// </summary>
     public bool paused = false;
+
+    // Smooth blend weight: 0 = paused (bones at current), 1 = fully active idle
+    // This prevents snapping when transitioning to/from paused state
+    private float blendWeight = 1f;
+    private float blendSpeed = 4f; // ~0.25s to full blend
 
     // Random phase offset so two characters don't move in sync
     private float phaseOffset;
@@ -85,19 +98,23 @@ public class IdleAnimator : MonoBehaviour
         headBone     = anim.GetBoneTransform(HumanBodyBones.Head);
         spineBone    = anim.GetBoneTransform(HumanBodyBones.Spine);
         hipsBone     = anim.GetBoneTransform(HumanBodyBones.Hips);
-        leftUpperArm = anim.GetBoneTransform(HumanBodyBones.LeftUpperArm);
+        leftUpperArm  = anim.GetBoneTransform(HumanBodyBones.LeftUpperArm);
         rightUpperArm = anim.GetBoneTransform(HumanBodyBones.RightUpperArm);
-        leftHand     = anim.GetBoneTransform(HumanBodyBones.LeftHand);
-        rightHand    = anim.GetBoneTransform(HumanBodyBones.RightHand);
+        leftLowerArm  = anim.GetBoneTransform(HumanBodyBones.LeftLowerArm);
+        rightLowerArm = anim.GetBoneTransform(HumanBodyBones.RightLowerArm);
+        leftHand      = anim.GetBoneTransform(HumanBodyBones.LeftHand);
+        rightHand     = anim.GetBoneTransform(HumanBodyBones.RightHand);
 
         // Snapshot rest rotations (PoseManager should have applied these already)
-        if (headBone != null)      headRest      = headBone.localRotation;
-        if (spineBone != null)     spineRest     = spineBone.localRotation;
-        if (hipsBone != null)      hipsRest      = hipsBone.localRotation;
-        if (leftUpperArm != null)  leftArmRest   = leftUpperArm.localRotation;
-        if (rightUpperArm != null) rightArmRest  = rightUpperArm.localRotation;
-        if (leftHand != null)      leftHandRest  = leftHand.localRotation;
-        if (rightHand != null)     rightHandRest = rightHand.localRotation;
+        if (headBone != null)       headRest           = headBone.localRotation;
+        if (spineBone != null)      spineRest          = spineBone.localRotation;
+        if (hipsBone != null)       hipsRest           = hipsBone.localRotation;
+        if (leftUpperArm != null)   leftArmRest        = leftUpperArm.localRotation;
+        if (rightUpperArm != null)  rightArmRest       = rightUpperArm.localRotation;
+        if (leftLowerArm != null)   leftLowerArmRest   = leftLowerArm.localRotation;
+        if (rightLowerArm != null)  rightLowerArmRest  = rightLowerArm.localRotation;
+        if (leftHand != null)       leftHandRest       = leftHand.localRotation;
+        if (rightHand != null)      rightHandRest      = rightHand.localRotation;
 
         bonesReady = true;
     }
@@ -114,21 +131,31 @@ public class IdleAnimator : MonoBehaviour
         float s = baseScale + breatheOffset;
         transform.localScale = new Vector3(s, s, s);
 
-        if (!bonesReady || paused) return; // Skip bone rotations when emote is playing
+        if (!bonesReady) return;
+
+        // Smooth blend weight transition — avoids snapping on pause/unpause
+        float targetWeight = paused ? 0f : 1f;
+        blendWeight = Mathf.MoveTowards(blendWeight, targetWeight, blendSpeed * Time.deltaTime);
+
+        if (blendWeight < 0.001f) return; // Fully paused, skip bone work
+
+        float w = blendWeight; // shorthand
 
         // ---- Spine: gentle side sway (shifting weight feel) ----
         if (spineBone != null)
         {
             float sway = Mathf.Sin(t * swaySpeed) * swayAmount;
             float lean = Mathf.Sin(t * swaySpeed * 0.7f) * (swayAmount * 0.3f);
-            spineBone.localRotation = spineRest * Quaternion.Euler(lean, 0f, sway);
+            Quaternion target = spineRest * Quaternion.Euler(lean, 0f, sway);
+            spineBone.localRotation = Quaternion.Slerp(spineBone.localRotation, target, w);
         }
 
         // ---- Hips: subtle rotation for weight shift ----
         if (hipsBone != null)
         {
             float shift = Mathf.Sin(t * weightShiftSpeed) * weightShiftAmount;
-            hipsBone.localRotation = hipsRest * Quaternion.Euler(0f, shift, 0f);
+            Quaternion target = hipsRest * Quaternion.Euler(0f, shift, 0f);
+            hipsBone.localRotation = Quaternion.Slerp(hipsBone.localRotation, target, w);
         }
 
         // ---- Head: slow look-around (tilt + turn on different phases) ----
@@ -137,31 +164,52 @@ public class IdleAnimator : MonoBehaviour
             float tilt = Mathf.Sin(t * headTiltSpeed) * headTiltAmount;
             float turn = Mathf.Sin(t * headTurnSpeed + 1.5f) * headTurnAmount;
             float nod  = Mathf.Sin(t * headTiltSpeed * 0.6f + 0.8f) * (headTiltAmount * 0.5f);
-            headBone.localRotation = headRest * Quaternion.Euler(nod, turn, tilt);
+            Quaternion target = headRest * Quaternion.Euler(nod, turn, tilt);
+            headBone.localRotation = Quaternion.Slerp(headBone.localRotation, target, w);
         }
 
         // ---- Arms: gentle micro-sway (natural hanging movement) ----
         if (leftUpperArm != null)
         {
             float armSway = Mathf.Sin(t * armSwaySpeed + 0.5f) * armSwayAmount;
-            leftUpperArm.localRotation = leftArmRest * Quaternion.Euler(armSway, 0f, armSway * 0.3f);
+            Quaternion target = leftArmRest * Quaternion.Euler(armSway, 0f, armSway * 0.3f);
+            leftUpperArm.localRotation = Quaternion.Slerp(leftUpperArm.localRotation, target, w);
         }
         if (rightUpperArm != null)
         {
             float armSway = Mathf.Sin(t * armSwaySpeed + 2.0f) * armSwayAmount;
-            rightUpperArm.localRotation = rightArmRest * Quaternion.Euler(armSway, 0f, -armSway * 0.3f);
+            Quaternion target = rightArmRest * Quaternion.Euler(armSway, 0f, -armSway * 0.3f);
+            rightUpperArm.localRotation = Quaternion.Slerp(rightUpperArm.localRotation, target, w);
+        }
+
+        // ---- Lower arms (elbows): gentle flex/extend ----
+        if (leftLowerArm != null)
+        {
+            float flex = Mathf.Sin(t * elbowFlexSpeed + 2.2f) * elbowFlexAmount;
+            float twist = Mathf.Sin(t * elbowFlexSpeed * 0.7f + 1.0f) * (elbowFlexAmount * 0.3f);
+            Quaternion target = leftLowerArmRest * Quaternion.Euler(flex, twist, 0f);
+            leftLowerArm.localRotation = Quaternion.Slerp(leftLowerArm.localRotation, target, w);
+        }
+        if (rightLowerArm != null)
+        {
+            float flex = Mathf.Sin(t * elbowFlexSpeed + 4.0f) * elbowFlexAmount;
+            float twist = Mathf.Sin(t * elbowFlexSpeed * 0.7f + 2.8f) * (elbowFlexAmount * 0.3f);
+            Quaternion target = rightLowerArmRest * Quaternion.Euler(flex, twist, 0f);
+            rightLowerArm.localRotation = Quaternion.Slerp(rightLowerArm.localRotation, target, w);
         }
 
         // ---- Hands: very subtle fidget ----
         if (leftHand != null)
         {
             float fidget = Mathf.Sin(t * 1.8f + 1f) * 1.5f;
-            leftHand.localRotation = leftHandRest * Quaternion.Euler(fidget, 0f, 0f);
+            Quaternion target = leftHandRest * Quaternion.Euler(fidget, 0f, 0f);
+            leftHand.localRotation = Quaternion.Slerp(leftHand.localRotation, target, w);
         }
         if (rightHand != null)
         {
             float fidget = Mathf.Sin(t * 1.6f + 3f) * 1.5f;
-            rightHand.localRotation = rightHandRest * Quaternion.Euler(fidget, 0f, 0f);
+            Quaternion target = rightHandRest * Quaternion.Euler(fidget, 0f, 0f);
+            rightHand.localRotation = Quaternion.Slerp(rightHand.localRotation, target, w);
         }
     }
 

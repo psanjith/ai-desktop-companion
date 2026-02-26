@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -110,6 +111,41 @@ public class PoseManager : MonoBehaviour
             if (t != null)
                 t.localRotation = kvp.Value;
         }
+    }
+
+    /// <summary>
+    /// Smoothly blend all bones back to the saved rest pose over the given duration.
+    /// Call with StartCoroutine from another MonoBehaviour.
+    /// </summary>
+    public IEnumerator SmoothResetToRestPose(float duration)
+    {
+        if (animator == null || restPose.Count == 0) yield break;
+
+        // Snapshot current rotations
+        Dictionary<HumanBodyBones, Quaternion> startRotations = new Dictionary<HumanBodyBones, Quaternion>();
+        foreach (var kvp in restPose)
+        {
+            Transform t = animator.GetBoneTransform(kvp.Key);
+            if (t != null)
+                startRotations[kvp.Key] = t.localRotation;
+        }
+
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float blend = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+            foreach (var kvp in restPose)
+            {
+                Transform t = animator.GetBoneTransform(kvp.Key);
+                if (t != null && startRotations.ContainsKey(kvp.Key))
+                    t.localRotation = Quaternion.Slerp(startRotations[kvp.Key], kvp.Value, blend);
+            }
+            yield return null;
+        }
+
+        // Ensure final values are exact
+        ResetToRestPose();
     }
 
     /// <summary>

@@ -276,6 +276,10 @@ public class CompanionController : MonoBehaviour
                                     {
                                         fullRawText += tok.token;
 
+                                        // Feed accumulated text to gesture system for context awareness
+                                        if (emoteAnimator != null)
+                                            emoteAnimator.UpdateStreamText(fullRawText);
+
                                         // === In-stream emote detection ===
                                         // Detect *emote* markers as they complete and trigger immediately
                                         var allEmotes = System.Text.RegularExpressions.Regex.Matches(
