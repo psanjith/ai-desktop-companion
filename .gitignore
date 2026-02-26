@@ -1,0 +1,33 @@
+# macOS
+.DS_Store
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.db
+
+# Unity - ignore generated/large folders
+unity-client/DesktopCompanion/Library/
+unity-client/DesktopCompanion/Temp/
+unity-client/DesktopCompanion/Logs/
+unity-client/DesktopCompanion/UserSettings/
+unity-client/DesktopCompanion/obj/
+unity-client/DesktopCompanion/Build/
+unity-client/DesktopCompanion/MemoryCaptures/
+
+# StreamingAssets VRM copies (duplicates of Models/)
+unity-client/DesktopCompanion/Assets/StreamingAssets/
+
+# Build output
+build/
+
+# IDE
+.vscode/
+.idea/
+*.csproj
+*.sln
+*.user
