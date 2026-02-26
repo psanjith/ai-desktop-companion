@@ -9,34 +9,34 @@ using UnityEngine;
 public class IdleAnimator : MonoBehaviour
 {
     [Header("Bobbing (up/down)")]
-    public float bobAmount = 0.04f;
-    public float bobSpeed = 1.2f;
+    public float bobAmount = 0.025f;
+    public float bobSpeed = 0.7f;
 
     [Header("Breathing (chest scale pulse)")]
-    public float breatheAmount = 0.008f;
-    public float breatheSpeed = 2.5f;
+    public float breatheAmount = 0.005f;
+    public float breatheSpeed = 1.2f;
 
     [Header("Body Sway (side-to-side lean)")]
-    public float swayAmount = 3f;       // degrees
-    public float swaySpeed = 0.6f;
+    public float swayAmount = 2f;       // degrees
+    public float swaySpeed = 0.35f;
 
     [Header("Weight Shift (hips)")]
     public float weightShiftAmount = 2f; // degrees
-    public float weightShiftSpeed = 0.4f;
+    public float weightShiftSpeed = 0.22f;
 
     [Header("Head Movement")]
     public float headTiltAmount = 4f;    // degrees
-    public float headTiltSpeed = 0.35f;
+    public float headTiltSpeed = 0.2f;
     public float headTurnAmount = 6f;    // degrees
-    public float headTurnSpeed = 0.25f;
+    public float headTurnSpeed = 0.14f;
 
     [Header("Arm Micro-Movement")]
     public float armSwayAmount = 2f;     // degrees
-    public float armSwaySpeed = 0.8f;
+    public float armSwaySpeed = 0.45f;
 
     [Header("Elbow Movement")]
-    public float elbowFlexAmount = 6f;   // degrees
-    public float elbowFlexSpeed = 0.55f;
+    public float elbowFlexAmount = 4f;   // degrees
+    public float elbowFlexSpeed = 0.3f;
 
     private Vector3 startPos;
     private float baseScale = 1f;
@@ -201,13 +201,13 @@ public class IdleAnimator : MonoBehaviour
         // ---- Hands: very subtle fidget ----
         if (leftHand != null)
         {
-            float fidget = Mathf.Sin(t * 1.8f + 1f) * 1.5f;
+            float fidget = Mathf.Sin(t * 0.9f + 1f) * 1.5f;
             Quaternion target = leftHandRest * Quaternion.Euler(fidget, 0f, 0f);
             leftHand.localRotation = Quaternion.Slerp(leftHand.localRotation, target, w);
         }
         if (rightHand != null)
         {
-            float fidget = Mathf.Sin(t * 1.6f + 3f) * 1.5f;
+            float fidget = Mathf.Sin(t * 0.85f + 3f) * 1.5f;
             Quaternion target = rightHandRest * Quaternion.Euler(fidget, 0f, 0f);
             rightHand.localRotation = Quaternion.Slerp(rightHand.localRotation, target, w);
         }
