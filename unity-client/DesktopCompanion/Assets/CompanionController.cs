@@ -209,6 +209,11 @@ public class CompanionController : MonoBehaviour
             string fullRawText = "";
             int lastProcessed = 0;
 
+            // Start mouth animation while tokens stream in
+            var faceAnim = CharacterManager.Instance?.GetFaceAnimator();
+            if (faceAnim != null)
+                faceAnim.StartTalking();
+
             // Poll for incoming data while the request is in progress
             while (!req.isDone)
             {
@@ -232,17 +237,25 @@ public class CompanionController : MonoBehaviour
                                 // Check if this is a token or the final message
                                 if (jsonStr.Contains("\"done\""))
                                 {
-                                    // Final message with emotes — parse it
+                                    // Final message with emotes + emotion — parse it
                                     StreamDone done = JsonUtility.FromJson<StreamDone>(jsonStr);
                                     if (done.emotes != null && done.emotes.Length > 0)
                                     {
                                         TriggerEmotes(done.emotes);
+                                    }
+                                    // Set facial expression from detected emotion
+                                    if (!string.IsNullOrEmpty(done.emotion))
+                                    {
+                                        TriggerEmotion(done.emotion);
                                     }
                                     // Set clean reply (without emote markers)
                                     if (!string.IsNullOrEmpty(done.reply))
                                     {
                                         speechBubbleText.text = done.reply;
                                     }
+                                    // Stop talking mouth
+                                    if (faceAnim != null)
+                                        faceAnim.StopTalking();
                                 }
                                 else
                                 {
@@ -277,6 +290,8 @@ public class CompanionController : MonoBehaviour
                 if (speechBubbleText != null)
                     speechBubbleText.text = "Connection error.";
                 Debug.LogError(req.error);
+                if (faceAnim != null)
+                    faceAnim.StopTalking();
             }
         }
     }
@@ -294,6 +309,17 @@ public class CompanionController : MonoBehaviour
             Debug.Log($"Playing emote: {emotes[0]}");
             emoteAnimator.PlayEmote(emotes[0]);
         }
+    }
+
+    private void TriggerEmotion(string emotion)
+    {
+        if (CharacterManager.Instance == null) return;
+
+        var faceAnimator = CharacterManager.Instance.GetFaceAnimator();
+        if (faceAnimator == null) return;
+
+        Debug.Log($"Setting emotion: {emotion}");
+        faceAnimator.SetEmotion(emotion);
     }
 
     [System.Serializable]
@@ -322,6 +348,7 @@ public class CompanionController : MonoBehaviour
         public bool done;
         public string reply;
         public string[] emotes;
+        public string emotion;
     }
 
     [System.Serializable]

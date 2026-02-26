@@ -17,6 +17,40 @@ ollama_client = Client(host="http://localhost:11434")
 app = Flask(__name__)
 
 
+def detect_emotion(text, emotes):
+    """Detect the dominant emotion from reply text and emotes.
+    Returns: joy, angry, sorrow, fun, or neutral."""
+    lower = text.lower()
+    emote_str = " ".join(emotes).lower() if emotes else ""
+    combined = lower + " " + emote_str
+
+    joy_words = ["haha", "laugh", "giggle", "happy", "excited", "yay", "awesome",
+                 "great", "love", "!!", "woohoo", "cheer", "jump", "bounce", "wave"]
+    angry_words = ["angry", "grr", "ugh", "annoy", "frustrat", "mad", "hate",
+                   "shake", "frown", "no way"]
+    sad_words = ["sad", "sigh", "sorry", "miss", "lonely", "cry", "tear",
+                 "unfortunat", "sorrow", "down"]
+    fun_words = ["tease", "wink", "blush", "shy", "playful", "heh", "wiggle",
+                 "poke", "cheeky", "fluster", "embarrass", "fun", "silly"]
+
+    scores = {
+        "joy": sum(1 for w in joy_words if w in combined),
+        "angry": sum(1 for w in angry_words if w in combined),
+        "sorrow": sum(1 for w in sad_words if w in combined),
+        "fun": sum(1 for w in fun_words if w in combined),
+    }
+
+    best = max(scores, key=scores.get)
+    if scores[best] == 0:
+        # Fallback: check punctuation/energy
+        if combined.count("!") >= 2:
+            return "joy"
+        if "?" in combined and "..." in combined:
+            return "fun"
+        return "neutral"
+    return best
+
+
 def get_db():
     """Open a fresh SQLite connection per request (thread-safe)."""
     conn = sqlite3.connect(MEMORY_DB_PATH)
@@ -133,7 +167,8 @@ def chat_api():
         if not user_input:
             return jsonify({"error": "No message provided"}), 400
         reply, emotes = chat(user_input, character)
-        return jsonify({"reply": reply, "emotes": emotes})
+        emotion = detect_emotion(reply, emotes)
+        return jsonify({"reply": reply, "emotes": emotes, "emotion": emotion})
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -238,8 +273,11 @@ def chat_stream_api():
 
             conn.close()
 
-            # Send final event with emotes and clean reply
-            yield f"data: {json.dumps({'done': True, 'reply': clean_reply, 'emotes': emotes})}\n\n"
+            # Detect emotion from the full reply
+            emotion = detect_emotion(clean_reply, emotes)
+
+            # Send final event with emotes, emotion, and clean reply
+            yield f"data: {json.dumps({'done': True, 'reply': clean_reply, 'emotes': emotes, 'emotion': emotion})}\n\n"
 
         return Response(
             stream_with_context(generate()),

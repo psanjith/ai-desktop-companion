@@ -39,7 +39,7 @@ public class EmoteAnimator : MonoBehaviour
             StartCoroutine(DoTiltBack());
         else if (lower.Contains("nod"))
             StartCoroutine(DoNod());
-        else if (lower.Contains("wave"))
+        else if (lower.Contains("wave") || lower.Contains("greet") || lower.Contains("hi"))
             StartCoroutine(DoWave());
         else if (lower.Contains("giggle") || lower.Contains("laugh") || lower.Contains("chuckle"))
             StartCoroutine(DoBounce());
@@ -57,10 +57,29 @@ public class EmoteAnimator : MonoBehaviour
             StartCoroutine(DoSquash());
         else if (lower.Contains("shrug"))
             StartCoroutine(DoShrug());
-        else if (lower.Contains("shake") || lower.Contains("no"))
+        else if (lower.Contains("shake") || lower.Contains("no") || lower.Contains("disagree"))
             StartCoroutine(DoHeadShake());
+        else if (lower.Contains("spin") || lower.Contains("twirl"))
+            StartCoroutine(DoSpin());
+        else if (lower.Contains("dance") || lower.Contains("groove") || lower.Contains("sway"))
+            StartCoroutine(DoDance());
+        else if (lower.Contains("peek") || lower.Contains("hide") || lower.Contains("sneak"))
+            StartCoroutine(DoPeek());
+        else if (lower.Contains("pout") || lower.Contains("sulk") || lower.Contains("grumpy"))
+            StartCoroutine(DoPout());
+        else if (lower.Contains("clap") || lower.Contains("applaud") || lower.Contains("bravo"))
+            StartCoroutine(DoClap());
+        else if (lower.Contains("gasp") || lower.Contains("shock") || lower.Contains("surprise"))
+            StartCoroutine(DoGasp());
+        else if (lower.Contains("pat") || lower.Contains("comfort") || lower.Contains("hug"))
+            StartCoroutine(DoGentle());
         else
             StartCoroutine(DoBounce()); // Default: gentle bounce
+
+        // Also trigger facial expression if FaceAnimator exists
+        var faceAnim = GetComponent<FaceAnimator>();
+        if (faceAnim != null)
+            faceAnim.SetEmotionFromEmote(lower);
     }
 
     // --- Emote Animations ---
@@ -242,6 +261,165 @@ public class EmoteAnimator : MonoBehaviour
             yield return RotateOverTime(Vector3.up, -angle * 2f, speed * 2f);
             yield return RotateOverTime(Vector3.up, angle, speed);
         }
+
+        ResetState();
+    }
+
+    // --- New Emote Animations ---
+
+    /// <summary> Full 360 spin (twirl/spin) </summary>
+    IEnumerator DoSpin()
+    {
+        isPlaying = true;
+        float duration = 0.6f;
+        float elapsed = 0f;
+        Quaternion startRot = transform.localRotation;
+
+        // Slight hop + spin
+        Vector3 startPos = transform.localPosition;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = elapsed / duration;
+            float angle = Mathf.Lerp(0f, 360f, t);
+            transform.localRotation = startRot * Quaternion.Euler(0f, angle, 0f);
+            // Little hop arc
+            float hop = Mathf.Sin(t * Mathf.PI) * 0.08f;
+            transform.localPosition = startPos + Vector3.up * hop;
+            yield return null;
+        }
+
+        ResetState();
+    }
+
+    /// <summary> Side-to-side dance sway with bounce </summary>
+    IEnumerator DoDance()
+    {
+        isPlaying = true;
+        float swayAngle = 10f;
+        float bounceHeight = 0.04f;
+        float beatTime = 0.2f;
+
+        for (int i = 0; i < 6; i++)
+        {
+            float dir = (i % 2 == 0) ? 1f : -1f;
+            float elapsed = 0f;
+            Vector3 startPos = transform.localPosition;
+            Quaternion startRot = transform.localRotation;
+            Quaternion targetRot = originalRot * Quaternion.Euler(0f, 0f, swayAngle * dir);
+
+            while (elapsed < beatTime)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / beatTime;
+                transform.localRotation = Quaternion.Slerp(startRot, targetRot, Mathf.SmoothStep(0, 1, t));
+                float bounce = Mathf.Sin(t * Mathf.PI) * bounceHeight;
+                transform.localPosition = originalPos + Vector3.up * bounce;
+                yield return null;
+            }
+        }
+
+        ResetState();
+    }
+
+    /// <summary> Peek out from below (shy peek) </summary>
+    IEnumerator DoPeek()
+    {
+        isPlaying = true;
+        float hideAmount = -0.12f;
+
+        // Duck down
+        yield return MoveOverTime(Vector3.up, hideAmount, 0.2f);
+        yield return new WaitForSeconds(0.3f);
+        // Peek up slowly
+        yield return MoveOverTime(Vector3.up, -hideAmount * 0.7f, 0.4f);
+        yield return new WaitForSeconds(0.5f);
+        // Go back to normal
+        yield return MoveOverTime(Vector3.up, -hideAmount * 0.3f + hideAmount, 0.2f);
+
+        ResetState();
+    }
+
+    /// <summary> Puff up and deflate (pout/sulk) </summary>
+    IEnumerator DoPout()
+    {
+        isPlaying = true;
+        Vector3 puffScale = new Vector3(originalScale.x * 1.08f, originalScale.y * 0.95f, originalScale.z * 1.08f);
+
+        // Puff up
+        yield return ScaleOverTime(puffScale, 0.2f);
+        // Tiny head shakes while pouting
+        for (int i = 0; i < 2; i++)
+        {
+            yield return RotateOverTime(Vector3.forward, 5f, 0.1f);
+            yield return RotateOverTime(Vector3.forward, -10f, 0.2f);
+            yield return RotateOverTime(Vector3.forward, 5f, 0.1f);
+        }
+        yield return new WaitForSeconds(0.2f);
+        // Deflate back
+        yield return ScaleOverTime(originalScale, 0.3f);
+
+        ResetState();
+    }
+
+    /// <summary> Quick bouncy clap </summary>
+    IEnumerator DoClap()
+    {
+        isPlaying = true;
+        float squishAmount = 0.04f;
+        float speed = 0.06f;
+
+        for (int i = 0; i < 5; i++)
+        {
+            // Squish in (hands coming together)
+            Vector3 squished = new Vector3(originalScale.x * 0.92f, originalScale.y * 1.03f, originalScale.z);
+            yield return ScaleOverTime(squished, speed);
+            yield return ScaleOverTime(originalScale, speed);
+            // Tiny bounce with each clap
+            yield return MoveOverTime(Vector3.up, squishAmount, speed * 0.5f);
+            yield return MoveOverTime(Vector3.up, -squishAmount, speed * 0.5f);
+        }
+
+        ResetState();
+    }
+
+    /// <summary> Jolt back in surprise (gasp) </summary>
+    IEnumerator DoGasp()
+    {
+        isPlaying = true;
+
+        // Quick jolt backward + up
+        Vector3 startPos = transform.localPosition;
+        Vector3 joltPos = startPos + new Vector3(0f, 0.06f, -0.03f);
+        Vector3 tallScale = new Vector3(originalScale.x * 0.9f, originalScale.y * 1.12f, originalScale.z * 0.9f);
+
+        yield return ScaleOverTime(tallScale, 0.08f);
+        transform.localPosition = joltPos;
+        yield return new WaitForSeconds(0.5f);
+
+        // Settle back
+        yield return ScaleOverTime(originalScale, 0.3f);
+        float elapsed = 0f;
+        while (elapsed < 0.3f)
+        {
+            elapsed += Time.deltaTime;
+            transform.localPosition = Vector3.Lerp(joltPos, originalPos, Mathf.SmoothStep(0, 1, elapsed / 0.3f));
+            yield return null;
+        }
+
+        ResetState();
+    }
+
+    /// <summary> Gentle forward lean (comfort/pat/hug) </summary>
+    IEnumerator DoGentle()
+    {
+        isPlaying = true;
+
+        // Lean forward gently
+        yield return RotateOverTime(Vector3.right, 8f, 0.3f);
+        yield return new WaitForSeconds(0.8f);
+        // Back to normal
+        yield return RotateOverTime(Vector3.right, -8f, 0.3f);
 
         ResetState();
     }

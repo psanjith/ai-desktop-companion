@@ -148,6 +148,12 @@ public class CharacterManager : MonoBehaviour
         return currentModel.GetComponent<EmoteAnimator>();
     }
 
+    public FaceAnimator GetFaceAnimator()
+    {
+        if (currentModel == null) return null;
+        return currentModel.GetComponent<FaceAnimator>();
+    }
+
     private void SetupIdleAnimation(GameObject model)
     {
         // Add a simple breathing/bobbing idle animation
@@ -165,6 +171,14 @@ public class CharacterManager : MonoBehaviour
         if (emote != null)
         {
             emote.CaptureOriginalState();
+        }
+
+        // Add face animator for VRM blend shape expressions
+        var face = model.AddComponent<FaceAnimator>();
+        if (face != null)
+        {
+            face.blinkInterval = 3.5f;
+            face.expressionHoldTime = 4f;
         }
     }
 }
