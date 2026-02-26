@@ -117,6 +117,13 @@ public class PoseManager : MonoBehaviour
     /// Smoothly blend all bones back to the saved rest pose over the given duration.
     /// Call with StartCoroutine from another MonoBehaviour.
     /// </summary>
+    /// <summary> Perlin's SmootherStep — zero velocity AND acceleration at boundaries. </summary>
+    private static float SmootherStep(float t)
+    {
+        t = Mathf.Clamp01(t);
+        return t * t * t * (t * (t * 6f - 15f) + 10f);
+    }
+
     public IEnumerator SmoothResetToRestPose(float duration)
     {
         if (animator == null || restPose.Count == 0) yield break;
@@ -134,7 +141,7 @@ public class PoseManager : MonoBehaviour
         while (elapsed < duration)
         {
             elapsed += Time.deltaTime;
-            float blend = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+            float blend = SmootherStep(elapsed / duration);
             foreach (var kvp in restPose)
             {
                 Transform t = animator.GetBoneTransform(kvp.Key);

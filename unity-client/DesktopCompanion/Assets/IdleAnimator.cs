@@ -75,7 +75,7 @@ public class IdleAnimator : MonoBehaviour
     // Smooth blend weight: 0 = paused (bones at current), 1 = fully active idle
     // This prevents snapping when transitioning to/from paused state
     private float blendWeight = 1f;
-    private float blendSpeed = 4f; // ~0.25s to full blend
+    private float blendSpeed = 5f; // exponential smoothing rate
 
     // Random phase offset so two characters don't move in sync
     private float phaseOffset;
@@ -133,9 +133,10 @@ public class IdleAnimator : MonoBehaviour
 
         if (!bonesReady) return;
 
-        // Smooth blend weight transition — avoids snapping on pause/unpause
+        // Smooth blend weight — exponential decay for organic ease-in/ease-out
         float targetWeight = paused ? 0f : 1f;
-        blendWeight = Mathf.MoveTowards(blendWeight, targetWeight, blendSpeed * Time.deltaTime);
+        blendWeight = Mathf.Lerp(blendWeight, targetWeight, 1f - Mathf.Exp(-blendSpeed * Time.deltaTime));
+        if (Mathf.Abs(blendWeight - targetWeight) < 0.005f) blendWeight = targetWeight;
 
         if (blendWeight < 0.001f) return; // Fully paused, skip bone work
 
