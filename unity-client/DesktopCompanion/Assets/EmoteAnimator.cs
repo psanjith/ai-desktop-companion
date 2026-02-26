@@ -92,7 +92,7 @@ public class EmoteAnimator : MonoBehaviour
     {
         isPlaying = true;
         float duration = 1.2f;
-        float maxAngle = 15f;
+        float maxAngle = 25f;
 
         // Tilt back
         yield return RotateOverTime(Vector3.right, maxAngle, duration * 0.4f);
@@ -114,14 +114,14 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion rest = head.localRotation;
             for (int i = 0; i < 3; i++)
             {
-                Quaternion down = rest * Quaternion.Euler(12f, 0f, 0f);
+                Quaternion down = rest * Quaternion.Euler(20f, 0f, 0f);
                 yield return RotateBoneOverTime(head, head.localRotation, down, 0.12f);
                 yield return RotateBoneOverTime(head, down, rest, 0.12f);
             }
         }
         else
         {
-            float nodAngle = 10f;
+            float nodAngle = 15f;
             float speed = 0.15f;
             for (int i = 0; i < 3; i++)
             {
@@ -144,9 +144,9 @@ public class EmoteAnimator : MonoBehaviour
         {
             // Raise right arm up
             Quaternion armRest = rightArm.localRotation;
-            Quaternion armRaised = armRest * Quaternion.Euler(-60f, 0f, -30f);
+            Quaternion armRaised = armRest * Quaternion.Euler(-80f, 0f, -40f);
             Quaternion lowerRest = rightLower != null ? rightLower.localRotation : Quaternion.identity;
-            Quaternion lowerBent = lowerRest * Quaternion.Euler(-40f, 0f, 0f);
+            Quaternion lowerBent = lowerRest * Quaternion.Euler(-50f, 0f, 0f);
 
             yield return RotateBoneOverTime(rightArm, armRest, armRaised, 0.25f);
             if (rightLower != null)
@@ -155,8 +155,8 @@ public class EmoteAnimator : MonoBehaviour
             // Wave back and forth
             for (int i = 0; i < 3; i++)
             {
-                Quaternion waveA = armRaised * Quaternion.Euler(0f, 0f, 15f);
-                Quaternion waveB = armRaised * Quaternion.Euler(0f, 0f, -15f);
+                Quaternion waveA = armRaised * Quaternion.Euler(0f, 0f, 25f);
+                Quaternion waveB = armRaised * Quaternion.Euler(0f, 0f, -25f);
                 yield return RotateBoneOverTime(rightArm, rightArm.localRotation, waveA, 0.12f);
                 yield return RotateBoneOverTime(rightArm, waveA, waveB, 0.24f);
                 yield return RotateBoneOverTime(rightArm, waveB, armRaised, 0.12f);
@@ -170,7 +170,7 @@ public class EmoteAnimator : MonoBehaviour
         else
         {
             // Fallback: body sway
-            float angle = 12f;
+            float angle = 18f;
             float speed = 0.2f;
             for (int i = 0; i < 3; i++)
             {
@@ -187,7 +187,7 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoBounce()
     {
         isPlaying = true;
-        float bounceHeight = 0.06f;
+        float bounceHeight = 0.10f;
         float speed = 0.08f;
 
         for (int i = 0; i < 4; i++)
@@ -203,7 +203,7 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoDeflate()
     {
         isPlaying = true;
-        float shrink = 0.9f;
+        float shrink = 0.82f;
         float duration = 0.5f;
 
         yield return ScaleOverTime(originalScale * shrink, duration);
@@ -217,7 +217,7 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoStretch()
     {
         isPlaying = true;
-        Vector3 tallScale = new Vector3(originalScale.x * 0.95f, originalScale.y * 1.15f, originalScale.z * 0.95f);
+        Vector3 tallScale = new Vector3(originalScale.x * 0.90f, originalScale.y * 1.25f, originalScale.z * 0.90f);
 
         yield return ScaleOverTime(tallScale, 0.4f);
         yield return new WaitForSeconds(0.5f);
@@ -230,11 +230,11 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoJump()
     {
         isPlaying = true;
-        float jumpHeight = 0.15f;
-        float upSpeed = 0.12f;
-        float downSpeed = 0.1f;
+        float jumpHeight = 0.22f;
+        float upSpeed = 0.10f;
+        float downSpeed = 0.08f;
 
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < 3; i++)
         {
             yield return MoveOverTime(Vector3.up, jumpHeight, upSpeed);
             yield return MoveOverTime(Vector3.up, -jumpHeight, downSpeed);
@@ -252,14 +252,14 @@ public class EmoteAnimator : MonoBehaviour
         if (head != null)
         {
             Quaternion rest = head.localRotation;
-            Quaternion tilted = rest * Quaternion.Euler(0f, 0f, 15f);
+            Quaternion tilted = rest * Quaternion.Euler(5f, 0f, 22f);
             yield return RotateBoneOverTime(head, rest, tilted, 0.3f);
             yield return new WaitForSeconds(0.8f);
             yield return RotateBoneOverTime(head, tilted, rest, 0.3f);
         }
         else
         {
-            float angle = 12f;
+            float angle = 18f;
             yield return RotateOverTime(Vector3.forward, angle, 0.3f);
             yield return new WaitForSeconds(0.8f);
             yield return RotateOverTime(Vector3.forward, -angle, 0.3f);
@@ -272,7 +272,7 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoWiggle()
     {
         isPlaying = true;
-        float amount = 0.02f;
+        float amount = 0.04f;
         float speed = 0.05f;
 
         for (int i = 0; i < 5; i++)
@@ -289,7 +289,7 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoSquash()
     {
         isPlaying = true;
-        Vector3 squash = new Vector3(originalScale.x * 1.05f, originalScale.y * 0.85f, originalScale.z * 1.05f);
+        Vector3 squash = new Vector3(originalScale.x * 1.12f, originalScale.y * 0.78f, originalScale.z * 1.12f);
 
         yield return ScaleOverTime(squash, 0.1f);
         yield return ScaleOverTime(originalScale, 0.15f);
@@ -301,7 +301,7 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoShrug()
     {
         isPlaying = true;
-        float upAmount = 0.04f;
+        float upAmount = 0.07f;
 
         yield return MoveOverTime(Vector3.up, upAmount, 0.15f);
         yield return new WaitForSeconds(0.4f);
@@ -321,8 +321,8 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion rest = head.localRotation;
             for (int i = 0; i < 3; i++)
             {
-                Quaternion left = rest * Quaternion.Euler(0f, -15f, 0f);
-                Quaternion right = rest * Quaternion.Euler(0f, 15f, 0f);
+                Quaternion left = rest * Quaternion.Euler(0f, -22f, 0f);
+                Quaternion right = rest * Quaternion.Euler(0f, 22f, 0f);
                 yield return RotateBoneOverTime(head, head.localRotation, left, 0.1f);
                 yield return RotateBoneOverTime(head, left, right, 0.2f);
                 yield return RotateBoneOverTime(head, right, rest, 0.1f);
@@ -330,7 +330,7 @@ public class EmoteAnimator : MonoBehaviour
         }
         else
         {
-            float angle = 10f;
+            float angle = 16f;
             float speed = 0.1f;
             for (int i = 0; i < 3; i++)
             {
@@ -362,7 +362,7 @@ public class EmoteAnimator : MonoBehaviour
             float angle = Mathf.Lerp(0f, 360f, t);
             transform.localRotation = startRot * Quaternion.Euler(0f, angle, 0f);
             // Little hop arc
-            float hop = Mathf.Sin(t * Mathf.PI) * 0.08f;
+            float hop = Mathf.Sin(t * Mathf.PI) * 0.14f;
             transform.localPosition = startPos + Vector3.up * hop;
             yield return null;
         }
@@ -374,8 +374,8 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoDance()
     {
         isPlaying = true;
-        float swayAngle = 10f;
-        float bounceHeight = 0.04f;
+        float swayAngle = 16f;
+        float bounceHeight = 0.08f;
         float beatTime = 0.2f;
 
         for (int i = 0; i < 6; i++)
@@ -404,7 +404,7 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoPeek()
     {
         isPlaying = true;
-        float hideAmount = -0.12f;
+        float hideAmount = -0.18f;
 
         // Duck down
         yield return MoveOverTime(Vector3.up, hideAmount, 0.2f);
@@ -422,16 +422,16 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoPout()
     {
         isPlaying = true;
-        Vector3 puffScale = new Vector3(originalScale.x * 1.08f, originalScale.y * 0.95f, originalScale.z * 1.08f);
+        Vector3 puffScale = new Vector3(originalScale.x * 1.14f, originalScale.y * 0.90f, originalScale.z * 1.14f);
 
         // Puff up
         yield return ScaleOverTime(puffScale, 0.2f);
-        // Tiny head shakes while pouting
-        for (int i = 0; i < 2; i++)
+        // Head shakes while pouting
+        for (int i = 0; i < 3; i++)
         {
-            yield return RotateOverTime(Vector3.forward, 5f, 0.1f);
-            yield return RotateOverTime(Vector3.forward, -10f, 0.2f);
-            yield return RotateOverTime(Vector3.forward, 5f, 0.1f);
+            yield return RotateOverTime(Vector3.forward, 8f, 0.1f);
+            yield return RotateOverTime(Vector3.forward, -16f, 0.2f);
+            yield return RotateOverTime(Vector3.forward, 8f, 0.1f);
         }
         yield return new WaitForSeconds(0.2f);
         // Deflate back
@@ -444,13 +444,13 @@ public class EmoteAnimator : MonoBehaviour
     IEnumerator DoClap()
     {
         isPlaying = true;
-        float squishAmount = 0.04f;
+        float squishAmount = 0.07f;
         float speed = 0.06f;
 
         for (int i = 0; i < 5; i++)
         {
             // Squish in (hands coming together)
-            Vector3 squished = new Vector3(originalScale.x * 0.92f, originalScale.y * 1.03f, originalScale.z);
+            Vector3 squished = new Vector3(originalScale.x * 0.88f, originalScale.y * 1.06f, originalScale.z);
             yield return ScaleOverTime(squished, speed);
             yield return ScaleOverTime(originalScale, speed);
             // Tiny bounce with each clap
@@ -468,8 +468,8 @@ public class EmoteAnimator : MonoBehaviour
 
         // Quick jolt backward + up
         Vector3 startPos = transform.localPosition;
-        Vector3 joltPos = startPos + new Vector3(0f, 0.06f, -0.03f);
-        Vector3 tallScale = new Vector3(originalScale.x * 0.9f, originalScale.y * 1.12f, originalScale.z * 0.9f);
+        Vector3 joltPos = startPos + new Vector3(0f, 0.10f, -0.04f);
+        Vector3 tallScale = new Vector3(originalScale.x * 0.85f, originalScale.y * 1.18f, originalScale.z * 0.85f);
 
         yield return ScaleOverTime(tallScale, 0.08f);
         transform.localPosition = joltPos;
@@ -494,10 +494,10 @@ public class EmoteAnimator : MonoBehaviour
         isPlaying = true;
 
         // Lean forward gently
-        yield return RotateOverTime(Vector3.right, 8f, 0.3f);
+        yield return RotateOverTime(Vector3.right, 14f, 0.3f);
         yield return new WaitForSeconds(0.8f);
         // Back to normal
-        yield return RotateOverTime(Vector3.right, -8f, 0.3f);
+        yield return RotateOverTime(Vector3.right, -14f, 0.3f);
 
         ResetState();
     }

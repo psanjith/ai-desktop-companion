@@ -169,10 +169,23 @@ public class CharacterManager : MonoBehaviour
         var idle = model.AddComponent<IdleAnimator>();
         if (idle != null)
         {
-            idle.bobAmount = 0.02f;
-            idle.bobSpeed = 1.5f;
-            idle.breatheAmount = 0.005f;
-            idle.breatheSpeed = 3f;
+            // Whole-body motion
+            idle.bobAmount = 0.04f;
+            idle.bobSpeed = 1.2f;
+            idle.breatheAmount = 0.008f;
+            idle.breatheSpeed = 2.5f;
+
+            // Bone-level idle (spine sway, head look-around, arm micro-movement)
+            idle.swayAmount = 3f;
+            idle.swaySpeed = 0.6f;
+            idle.weightShiftAmount = 2f;
+            idle.weightShiftSpeed = 0.4f;
+            idle.headTiltAmount = 4f;
+            idle.headTiltSpeed = 0.35f;
+            idle.headTurnAmount = 6f;
+            idle.headTurnSpeed = 0.25f;
+            idle.armSwayAmount = 2f;
+            idle.armSwaySpeed = 0.8f;
         }
 
         // Add emote animator for LLM-triggered animations
