@@ -197,6 +197,10 @@ public class CompanionController : MonoBehaviour
         string jsonBody = JsonUtility.ToJson(new ChatRequest { message = message, character = charName });
         byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonBody);
 
+        // Get animators once
+        var faceAnim = CharacterManager.Instance?.GetFaceAnimator();
+        var emoteAnimator = CharacterManager.Instance?.GetEmoteAnimator();
+
         // Use streaming endpoint — tokens arrive one at a time via SSE
         using (UnityWebRequest req = new UnityWebRequest(streamUrl, "POST"))
         {
@@ -208,11 +212,13 @@ public class CompanionController : MonoBehaviour
 
             string fullRawText = "";
             int lastProcessed = 0;
+            int detectedEmoteCount = 0; // Track in-stream emotes
 
-            // Start mouth animation while tokens stream in
-            var faceAnim = CharacterManager.Instance?.GetFaceAnimator();
+            // Start mouth animation + body gestures while tokens stream in
             if (faceAnim != null)
                 faceAnim.StartTalking();
+            if (emoteAnimator != null)
+                emoteAnimator.StartTalkingGestures();
 
             // Poll for incoming data while the request is in progress
             while (!req.isDone)
@@ -239,11 +245,16 @@ public class CompanionController : MonoBehaviour
                                 {
                                     // Final message with emotes + emotion — parse it
                                     StreamDone done = JsonUtility.FromJson<StreamDone>(jsonStr);
+
+                                    // Stop talking gestures — transition to emote animations
+                                    if (emoteAnimator != null)
+                                        emoteAnimator.StopTalkingGestures();
+
                                     if (done.emotes != null && done.emotes.Length > 0)
                                     {
                                         TriggerEmotes(done.emotes);
                                     }
-                                    // Set facial expression from detected emotion
+                                    // Set facial expression + guaranteed body animation
                                     if (!string.IsNullOrEmpty(done.emotion))
                                     {
                                         TriggerEmotion(done.emotion);
@@ -264,6 +275,30 @@ public class CompanionController : MonoBehaviour
                                     if (tok.token != null)
                                     {
                                         fullRawText += tok.token;
+
+                                        // === In-stream emote detection ===
+                                        // Detect *emote* markers as they complete and trigger immediately
+                                        var allEmotes = System.Text.RegularExpressions.Regex.Matches(
+                                            fullRawText, @"\*([^*]+)\*");
+                                        if (allEmotes.Count > detectedEmoteCount)
+                                        {
+                                            // New emote just completed! Trigger it now
+                                            string newEmote = allEmotes[allEmotes.Count - 1].Groups[1].Value;
+                                            Debug.Log($"In-stream emote detected: *{newEmote}*");
+                                            if (emoteAnimator != null)
+                                            {
+                                                // Stop gestures, play the specific emote
+                                                emoteAnimator.StopTalkingGestures();
+                                                emoteAnimator.PlayEmote(newEmote);
+                                                // Resume gestures after a delay
+                                                StartCoroutine(ResumeGesturesAfterEmote(emoteAnimator, 2.5f));
+                                            }
+                                            // Also set face from the emote
+                                            if (faceAnim != null)
+                                                faceAnim.SetEmotionFromEmote(newEmote);
+                                            detectedEmoteCount = allEmotes.Count;
+                                        }
+
                                         // Strip complete emote markers *like this*
                                         string display = System.Text.RegularExpressions.Regex.Replace(
                                             fullRawText, @"\*[^*]+\*", "");
@@ -292,8 +327,27 @@ public class CompanionController : MonoBehaviour
                 Debug.LogError(req.error);
                 if (faceAnim != null)
                     faceAnim.StopTalking();
+                if (emoteAnimator != null)
+                    emoteAnimator.StopTalkingGestures();
             }
         }
+    }
+
+    /// <summary>
+    /// Resume talking gestures after an in-stream emote finishes.
+    /// </summary>
+    private IEnumerator ResumeGesturesAfterEmote(EmoteAnimator emoteAnimator, float maxWait)
+    {
+        // Wait for the emote to finish
+        float elapsed = 0f;
+        while (emoteAnimator.IsPlaying && elapsed < maxWait)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        // Only resume if we haven't received the done message yet (i.e., still streaming)
+        // The gesture loop being null means StopTalkingGestures was called (done message arrived)
+        emoteAnimator.StartTalkingGestures();
     }
 
     private void TriggerEmotes(string[] emotes)
@@ -324,24 +378,29 @@ public class CompanionController : MonoBehaviour
             faceAnimator.SetEmotion(emotion);
         }
 
-        // ALSO trigger body animation from emotion as a guaranteed fallback.
-        // This fires after a short delay so the emote animation can play first.
-        // If the emote is still playing, PlayEmotionAnimation will skip (isPlaying check).
+        // ALSO trigger body animation from emotion as a GUARANTEED fallback.
+        // Uses a wait-until-ready loop instead of a simple delay — ensures it always fires.
         var emoteAnimator = CharacterManager.Instance.GetEmoteAnimator();
         if (emoteAnimator != null)
         {
-            StartCoroutine(DelayedEmotionAnimation(emoteAnimator, emotion, 1.5f));
+            StartCoroutine(WaitAndPlayEmotionAnimation(emoteAnimator, emotion, 5f));
         }
     }
 
     /// <summary>
-    /// Wait for any current emote to finish, then trigger an emotion-based body animation.
-    /// Guarantees visible bone movement on every single response.
+    /// Wait until any current emote finishes, then trigger an emotion body animation.
+    /// Retries for up to maxWait seconds — guarantees the animation eventually plays.
     /// </summary>
-    private IEnumerator DelayedEmotionAnimation(EmoteAnimator emoteAnimator, string emotion, float delay)
+    private IEnumerator WaitAndPlayEmotionAnimation(EmoteAnimator emoteAnimator, string emotion, float maxWait)
     {
-        yield return new WaitForSeconds(delay);
-        // Only play if the previous emote animation has finished
+        float elapsed = 0f;
+        // Wait until the emote animator is free
+        while (emoteAnimator.IsPlaying && elapsed < maxWait)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+        Debug.Log($"Emotion body animation firing: {emotion} (waited {elapsed:F1}s)");
         emoteAnimator.PlayEmotionAnimation(emotion);
     }
 

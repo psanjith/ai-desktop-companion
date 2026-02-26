@@ -10,11 +10,16 @@ using UnityEngine;
 public class EmoteAnimator : MonoBehaviour
 {
     private bool isPlaying = false;
+    private bool isGesturing = false;
     private Vector3 originalPos;
     private Quaternion originalRot;
     private Vector3 originalScale;
     private PoseManager poseManager;
     private IdleAnimator idleAnimator;
+    private Coroutine gestureLoopRef;
+
+    /// <summary> True if a full emote animation is currently playing. </summary>
+    public bool IsPlaying => isPlaying;
 
     void Start()
     {
@@ -30,15 +35,347 @@ public class EmoteAnimator : MonoBehaviour
         originalScale = transform.localScale;
     }
 
+    // ===================== Talking Gesture System =====================
+    // Continuous small bone movements while the character is "speaking".
+    // Runs on a loop, pauses for full emotes, resumes automatically.
+
     /// <summary>
-    /// Trigger an emote animation by keyword.
-    /// Accepts any text — uses aggressive fuzzy matching to find the best animation.
+    /// Start looping random talking gestures. Call when streaming begins.
+    /// </summary>
+    public void StartTalkingGestures()
+    {
+        StopTalkingGestures(); // prevent duplicates
+        gestureLoopRef = StartCoroutine(TalkingGestureLoop());
+        Debug.Log("EmoteAnimator: Talking gestures STARTED");
+    }
+
+    /// <summary>
+    /// Stop the talking gesture loop. Call when streaming ends.
+    /// </summary>
+    public void StopTalkingGestures()
+    {
+        if (gestureLoopRef != null)
+        {
+            StopCoroutine(gestureLoopRef);
+            gestureLoopRef = null;
+        }
+        if (isGesturing)
+        {
+            isGesturing = false;
+            if (poseManager != null) poseManager.ResetToRestPose();
+            if (idleAnimator != null) idleAnimator.paused = false;
+        }
+        Debug.Log("EmoteAnimator: Talking gestures STOPPED");
+    }
+
+    IEnumerator TalkingGestureLoop()
+    {
+        // Small initial delay so the first gesture doesn't fire instantly
+        yield return new WaitForSeconds(0.3f);
+
+        while (true)
+        {
+            // Wait if a full emote is currently playing
+            while (isPlaying) yield return null;
+
+            // Play a random talking gesture
+            yield return PlayRandomGesture();
+
+            // Random pause between gestures (1.0 - 2.0 seconds)
+            float wait = Random.Range(1.0f, 2.0f);
+            float elapsed = 0f;
+            while (elapsed < wait)
+            {
+                elapsed += Time.deltaTime;
+                // Break early if a full emote needs to play
+                if (isPlaying) break;
+                yield return null;
+            }
+        }
+    }
+
+    IEnumerator PlayRandomGesture()
+    {
+        if (isPlaying || isGesturing) yield break;
+
+        isGesturing = true;
+        if (idleAnimator != null) idleAnimator.paused = true;
+
+        int pick = Random.Range(0, 10);
+        switch (pick)
+        {
+            case 0: yield return GestureHeadTilt(); break;
+            case 1: yield return GestureHandRaise(); break;
+            case 2: yield return GestureSmallNod(); break;
+            case 3: yield return GestureLeanForward(); break;
+            case 4: yield return GestureHandOut(); break;
+            case 5: yield return GestureShoulderLift(); break;
+            case 6: yield return GestureHeadTurn(); break;
+            case 7: yield return GestureBothHandsOut(); break;
+            case 8: yield return GestureHandToChest(); break;
+            case 9: yield return GestureBodyShift(); break;
+        }
+
+        // Clean up after gesture
+        if (poseManager != null) poseManager.ResetToRestPose();
+        if (idleAnimator != null) idleAnimator.paused = false;
+        isGesturing = false;
+    }
+
+    // --- Talking Gesture Coroutines (quick, 0.4-0.8s, 2-3 bones each) ---
+
+    IEnumerator GestureHeadTilt()
+    {
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
+        if (head == null) yield break;
+        Quaternion rest = head.localRotation;
+        float dir = Random.value > 0.5f ? 1f : -1f;
+        Quaternion tilted = rest * Quaternion.Euler(0f, 0f, 18f * dir);
+        yield return RotateBoneOverTime(head, rest, tilted, 0.2f);
+        yield return new WaitForSeconds(0.25f);
+        yield return RotateBoneOverTime(head, tilted, rest, 0.2f);
+    }
+
+    IEnumerator GestureHandRaise()
+    {
+        bool useRight = Random.value > 0.5f;
+        Transform arm = poseManager?.GetBone(useRight ? HumanBodyBones.RightUpperArm : HumanBodyBones.LeftUpperArm);
+        Transform lower = poseManager?.GetBone(useRight ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
+        Transform hand = poseManager?.GetBone(useRight ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+        if (arm == null) yield break;
+
+        Quaternion aRest = arm.localRotation;
+        Quaternion lRest = lower != null ? lower.localRotation : Quaternion.identity;
+        Quaternion hRest = hand != null ? hand.localRotation : Quaternion.identity;
+
+        float side = useRight ? -1f : 1f;
+        Quaternion aUp = aRest * Quaternion.Euler(-40f, 0f, 15f * side);
+        Quaternion lBent = lRest * Quaternion.Euler(-45f, 0f, 0f);
+        Quaternion hTilt = hRest * Quaternion.Euler(0f, 0f, 15f * side);
+
+        yield return RotateBoneOverTime(arm, aRest, aUp, 0.2f);
+        if (lower != null) lower.localRotation = lBent;
+        if (hand != null) hand.localRotation = hTilt;
+        yield return new WaitForSeconds(0.3f);
+        if (lower != null) lower.localRotation = lRest;
+        if (hand != null) hand.localRotation = hRest;
+        yield return RotateBoneOverTime(arm, aUp, aRest, 0.2f);
+    }
+
+    IEnumerator GestureSmallNod()
+    {
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
+        Transform spine = poseManager?.GetBone(HumanBodyBones.Spine);
+        if (head == null) yield break;
+        Quaternion hRest = head.localRotation;
+        Quaternion sRest = spine != null ? spine.localRotation : Quaternion.identity;
+
+        for (int i = 0; i < 2; i++)
+        {
+            Quaternion down = hRest * Quaternion.Euler(15f, 0f, 0f);
+            if (spine != null) spine.localRotation = sRest * Quaternion.Euler(3f, 0f, 0f);
+            yield return RotateBoneOverTime(head, hRest, down, 0.1f);
+            yield return RotateBoneOverTime(head, down, hRest, 0.1f);
+            if (spine != null) spine.localRotation = sRest;
+        }
+    }
+
+    IEnumerator GestureLeanForward()
+    {
+        Transform spine = poseManager?.GetBone(HumanBodyBones.Spine);
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
+        if (spine == null) yield break;
+        Quaternion sRest = spine.localRotation;
+        Quaternion hRest = head != null ? head.localRotation : Quaternion.identity;
+
+        Quaternion sLean = sRest * Quaternion.Euler(12f, 0f, 0f);
+        Quaternion hUp = hRest * Quaternion.Euler(-8f, 0f, 0f);
+
+        yield return RotateBoneOverTime(spine, sRest, sLean, 0.2f);
+        if (head != null) head.localRotation = hUp;
+        yield return new WaitForSeconds(0.3f);
+        if (head != null) head.localRotation = hRest;
+        yield return RotateBoneOverTime(spine, sLean, sRest, 0.2f);
+    }
+
+    IEnumerator GestureHandOut()
+    {
+        bool useRight = Random.value > 0.5f;
+        Transform arm = poseManager?.GetBone(useRight ? HumanBodyBones.RightUpperArm : HumanBodyBones.LeftUpperArm);
+        Transform lower = poseManager?.GetBone(useRight ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
+        Transform hand = poseManager?.GetBone(useRight ? HumanBodyBones.RightHand : HumanBodyBones.LeftHand);
+        if (arm == null) yield break;
+
+        Quaternion aRest = arm.localRotation;
+        Quaternion lRest = lower != null ? lower.localRotation : Quaternion.identity;
+        Quaternion hRest = hand != null ? hand.localRotation : Quaternion.identity;
+
+        float side = useRight ? -1f : 1f;
+        // Arm extends out and forward (explaining gesture)
+        Quaternion aOut = aRest * Quaternion.Euler(-35f, 10f * side, 20f * side);
+        Quaternion lStraight = lRest * Quaternion.Euler(-20f, 0f, 0f);
+        Quaternion hFlat = hRest * Quaternion.Euler(-25f, 0f, 0f);
+
+        yield return RotateBoneOverTime(arm, aRest, aOut, 0.18f);
+        if (lower != null) lower.localRotation = lStraight;
+        if (hand != null) hand.localRotation = hFlat;
+        yield return new WaitForSeconds(0.35f);
+        if (lower != null) lower.localRotation = lRest;
+        if (hand != null) hand.localRotation = hRest;
+        yield return RotateBoneOverTime(arm, aOut, aRest, 0.18f);
+    }
+
+    IEnumerator GestureShoulderLift()
+    {
+        Transform leftArm = poseManager?.GetBone(HumanBodyBones.LeftUpperArm);
+        Transform rightArm = poseManager?.GetBone(HumanBodyBones.RightUpperArm);
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
+        if (leftArm == null || rightArm == null) yield break;
+
+        Quaternion lRest = leftArm.localRotation;
+        Quaternion rRest = rightArm.localRotation;
+        Quaternion hRest = head != null ? head.localRotation : Quaternion.identity;
+
+        Quaternion lLift = lRest * Quaternion.Euler(-12f, 0f, -8f);
+        Quaternion rLift = rRest * Quaternion.Euler(-12f, 0f, 8f);
+        Quaternion hTilt = hRest * Quaternion.Euler(0f, 0f, 8f);
+
+        leftArm.localRotation = lLift;
+        rightArm.localRotation = rLift;
+        if (head != null) head.localRotation = hTilt;
+        yield return MoveOverTime(Vector3.up, 0.02f, 0.1f);
+        yield return new WaitForSeconds(0.25f);
+        yield return MoveOverTime(Vector3.up, -0.02f, 0.15f);
+        leftArm.localRotation = lRest;
+        rightArm.localRotation = rRest;
+        if (head != null) head.localRotation = hRest;
+    }
+
+    IEnumerator GestureHeadTurn()
+    {
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
+        Transform spine = poseManager?.GetBone(HumanBodyBones.Spine);
+        if (head == null) yield break;
+        Quaternion hRest = head.localRotation;
+        Quaternion sRest = spine != null ? spine.localRotation : Quaternion.identity;
+
+        float dir = Random.value > 0.5f ? 1f : -1f;
+        Quaternion hTurn = hRest * Quaternion.Euler(0f, 22f * dir, 0f);
+        Quaternion sTurn = sRest * Quaternion.Euler(0f, 5f * dir, 0f);
+
+        yield return RotateBoneOverTime(head, hRest, hTurn, 0.2f);
+        if (spine != null) spine.localRotation = sTurn;
+        yield return new WaitForSeconds(0.3f);
+        if (spine != null) spine.localRotation = sRest;
+        yield return RotateBoneOverTime(head, hTurn, hRest, 0.25f);
+    }
+
+    IEnumerator GestureBothHandsOut()
+    {
+        Transform leftArm = poseManager?.GetBone(HumanBodyBones.LeftUpperArm);
+        Transform rightArm = poseManager?.GetBone(HumanBodyBones.RightUpperArm);
+        Transform leftLower = poseManager?.GetBone(HumanBodyBones.LeftLowerArm);
+        Transform rightLower = poseManager?.GetBone(HumanBodyBones.RightLowerArm);
+        Transform leftHand = poseManager?.GetBone(HumanBodyBones.LeftHand);
+        Transform rightHand = poseManager?.GetBone(HumanBodyBones.RightHand);
+        if (leftArm == null || rightArm == null) yield break;
+
+        Quaternion lRest = leftArm.localRotation;
+        Quaternion rRest = rightArm.localRotation;
+        Quaternion llRest = leftLower != null ? leftLower.localRotation : Quaternion.identity;
+        Quaternion rlRest = rightLower != null ? rightLower.localRotation : Quaternion.identity;
+        Quaternion lhRest = leftHand != null ? leftHand.localRotation : Quaternion.identity;
+        Quaternion rhRest = rightHand != null ? rightHand.localRotation : Quaternion.identity;
+
+        // Both arms come out in an "explaining" pose
+        Quaternion lOut = lRest * Quaternion.Euler(-30f, 0f, 12f);
+        Quaternion rOut = rRest * Quaternion.Euler(-30f, 0f, -12f);
+        Quaternion llBent = llRest * Quaternion.Euler(-35f, 0f, 0f);
+        Quaternion rlBent = rlRest * Quaternion.Euler(-35f, 0f, 0f);
+        Quaternion lhUp = lhRest * Quaternion.Euler(-20f, 0f, 0f);
+        Quaternion rhUp = rhRest * Quaternion.Euler(-20f, 0f, 0f);
+
+        yield return RotateBoneOverTime(leftArm, lRest, lOut, 0.18f);
+        rightArm.localRotation = rOut;
+        if (leftLower != null) leftLower.localRotation = llBent;
+        if (rightLower != null) rightLower.localRotation = rlBent;
+        if (leftHand != null) leftHand.localRotation = lhUp;
+        if (rightHand != null) rightHand.localRotation = rhUp;
+
+        yield return new WaitForSeconds(0.35f);
+
+        if (leftLower != null) leftLower.localRotation = llRest;
+        if (rightLower != null) rightLower.localRotation = rlRest;
+        if (leftHand != null) leftHand.localRotation = lhRest;
+        if (rightHand != null) rightHand.localRotation = rhRest;
+        yield return RotateBoneOverTime(leftArm, lOut, lRest, 0.18f);
+        rightArm.localRotation = rRest;
+    }
+
+    IEnumerator GestureHandToChest()
+    {
+        bool useRight = Random.value > 0.5f;
+        Transform arm = poseManager?.GetBone(useRight ? HumanBodyBones.RightUpperArm : HumanBodyBones.LeftUpperArm);
+        Transform lower = poseManager?.GetBone(useRight ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
+        if (arm == null) yield break;
+
+        Quaternion aRest = arm.localRotation;
+        Quaternion lRest = lower != null ? lower.localRotation : Quaternion.identity;
+
+        float side = useRight ? -1f : 1f;
+        Quaternion aChest = aRest * Quaternion.Euler(-25f, 15f * side, 10f * side);
+        Quaternion lBent = lRest * Quaternion.Euler(-60f, 0f, 0f);
+
+        yield return RotateBoneOverTime(arm, aRest, aChest, 0.2f);
+        if (lower != null) lower.localRotation = lBent;
+        yield return new WaitForSeconds(0.3f);
+        if (lower != null) lower.localRotation = lRest;
+        yield return RotateBoneOverTime(arm, aChest, aRest, 0.2f);
+    }
+
+    IEnumerator GestureBodyShift()
+    {
+        Transform spine = poseManager?.GetBone(HumanBodyBones.Spine);
+        Transform hips = poseManager?.GetBone(HumanBodyBones.Hips);
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
+        if (spine == null) yield break;
+
+        Quaternion sRest = spine.localRotation;
+        Quaternion hipRest = hips != null ? hips.localRotation : Quaternion.identity;
+        Quaternion hRest = head != null ? head.localRotation : Quaternion.identity;
+
+        float dir = Random.value > 0.5f ? 1f : -1f;
+        Quaternion sShift = sRest * Quaternion.Euler(0f, 0f, 8f * dir);
+        Quaternion hipShift = hipRest * Quaternion.Euler(0f, 4f * dir, 0f);
+        Quaternion hCompensate = hRest * Quaternion.Euler(0f, 0f, -5f * dir);
+
+        spine.localRotation = sShift;
+        if (hips != null) hips.localRotation = hipShift;
+        if (head != null) head.localRotation = hCompensate;
+        yield return new WaitForSeconds(0.5f);
+        spine.localRotation = sRest;
+        if (hips != null) hips.localRotation = hipRest;
+        if (head != null) head.localRotation = hRest;
+    }
+
+    // ===================== Full Emote System =====================
+    /// <summary>
+    /// Trigger a full emote animation by keyword.
+    /// Interrupts any current talking gesture. Accepts any text — aggressive fuzzy matching.
     /// </summary>
     public void PlayEmote(string emote)
     {
-        if (isPlaying) return; // Don't stack animations
+        if (isPlaying) return; // Don't stack full emotes
+
+        // Interrupt any active talking gesture immediately
+        if (isGesturing)
+        {
+            isGesturing = false;
+            if (poseManager != null) poseManager.ResetToRestPose();
+        }
 
         string lower = emote.ToLower().Trim();
+        Debug.Log($"EmoteAnimator.PlayEmote: '{lower}'");
 
         // Map keywords to animations — ordered from specific to general
         // Bone-heavy animations listed first for priority
@@ -1540,11 +1877,12 @@ public class EmoteAnimator : MonoBehaviour
         if (poseManager != null)
             poseManager.ResetToRestPose();
 
-        // Resume idle bone animations
+        // Resume idle bone animations (gesture loop will re-pause if needed)
         if (idleAnimator != null)
             idleAnimator.paused = false;
 
         isPlaying = false;
+        Debug.Log("EmoteAnimator: Full emote finished, isPlaying = false");
     }
 
     // --- Additional Dramatic Animations ---
