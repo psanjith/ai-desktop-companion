@@ -58,6 +58,12 @@ public class IdleAnimator : MonoBehaviour
 
     private bool bonesReady = false;
 
+    /// <summary>
+    /// When true, idle bone rotations are paused (emote is playing).
+    /// Transform-level bob/breathe still runs for subtle aliveness.
+    /// </summary>
+    public bool paused = false;
+
     // Random phase offset so two characters don't move in sync
     private float phaseOffset;
 
@@ -108,7 +114,7 @@ public class IdleAnimator : MonoBehaviour
         float s = baseScale + breatheOffset;
         transform.localScale = new Vector3(s, s, s);
 
-        if (!bonesReady) return;
+        if (!bonesReady || paused) return; // Skip bone rotations when emote is playing
 
         // ---- Spine: gentle side sway (shifting weight feel) ----
         if (spineBone != null)
