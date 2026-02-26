@@ -154,8 +154,17 @@ public class CharacterManager : MonoBehaviour
         return currentModel.GetComponent<FaceAnimator>();
     }
 
+    public PoseManager GetPoseManager()
+    {
+        if (currentModel == null) return null;
+        return currentModel.GetComponent<PoseManager>();
+    }
+
     private void SetupIdleAnimation(GameObject model)
     {
+        // Fix T-pose: apply natural rest pose FIRST (before other scripts read positions)
+        var pose = model.AddComponent<PoseManager>();
+
         // Add a simple breathing/bobbing idle animation
         var idle = model.AddComponent<IdleAnimator>();
         if (idle != null)

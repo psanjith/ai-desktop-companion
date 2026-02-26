@@ -4,7 +4,8 @@ using UnityEngine;
 
 /// <summary>
 /// Plays procedural emote animations on the character.
-/// Emote keywords from the LLM are mapped to transform-based animations.
+/// Emote keywords from the LLM are mapped to transform-based + bone animations.
+/// Uses PoseManager for bone access when available.
 /// </summary>
 public class EmoteAnimator : MonoBehaviour
 {
@@ -12,10 +13,12 @@ public class EmoteAnimator : MonoBehaviour
     private Vector3 originalPos;
     private Quaternion originalRot;
     private Vector3 originalScale;
+    private PoseManager poseManager;
 
     void Start()
     {
         CaptureOriginalState();
+        poseManager = GetComponent<PoseManager>();
     }
 
     public void CaptureOriginalState()
@@ -100,34 +103,81 @@ public class EmoteAnimator : MonoBehaviour
         ResetState();
     }
 
-    /// <summary> Quick nods (agreement) </summary>
+    /// <summary> Quick nods using head bone </summary>
     IEnumerator DoNod()
     {
         isPlaying = true;
-        float nodAngle = 10f;
-        float speed = 0.15f;
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
 
-        for (int i = 0; i < 3; i++)
+        if (head != null)
         {
-            yield return RotateOverTime(Vector3.right, nodAngle, speed);
-            yield return RotateOverTime(Vector3.right, -nodAngle, speed);
+            Quaternion rest = head.localRotation;
+            for (int i = 0; i < 3; i++)
+            {
+                Quaternion down = rest * Quaternion.Euler(12f, 0f, 0f);
+                yield return RotateBoneOverTime(head, head.localRotation, down, 0.12f);
+                yield return RotateBoneOverTime(head, down, rest, 0.12f);
+            }
+        }
+        else
+        {
+            float nodAngle = 10f;
+            float speed = 0.15f;
+            for (int i = 0; i < 3; i++)
+            {
+                yield return RotateOverTime(Vector3.right, nodAngle, speed);
+                yield return RotateOverTime(Vector3.right, -nodAngle, speed);
+            }
         }
 
         ResetState();
     }
 
-    /// <summary> Side-to-side sway (wave) </summary>
+    /// <summary> Wave with actual arm bone + body sway </summary>
     IEnumerator DoWave()
     {
         isPlaying = true;
-        float angle = 12f;
-        float speed = 0.2f;
+        Transform rightArm = poseManager?.GetBone(HumanBodyBones.RightUpperArm);
+        Transform rightLower = poseManager?.GetBone(HumanBodyBones.RightLowerArm);
 
-        for (int i = 0; i < 3; i++)
+        if (rightArm != null)
         {
-            yield return RotateOverTime(Vector3.forward, angle, speed);
-            yield return RotateOverTime(Vector3.forward, -angle * 2f, speed * 2f);
-            yield return RotateOverTime(Vector3.forward, angle, speed);
+            // Raise right arm up
+            Quaternion armRest = rightArm.localRotation;
+            Quaternion armRaised = armRest * Quaternion.Euler(-60f, 0f, -30f);
+            Quaternion lowerRest = rightLower != null ? rightLower.localRotation : Quaternion.identity;
+            Quaternion lowerBent = lowerRest * Quaternion.Euler(-40f, 0f, 0f);
+
+            yield return RotateBoneOverTime(rightArm, armRest, armRaised, 0.25f);
+            if (rightLower != null)
+                yield return RotateBoneOverTime(rightLower, lowerRest, lowerBent, 0.15f);
+
+            // Wave back and forth
+            for (int i = 0; i < 3; i++)
+            {
+                Quaternion waveA = armRaised * Quaternion.Euler(0f, 0f, 15f);
+                Quaternion waveB = armRaised * Quaternion.Euler(0f, 0f, -15f);
+                yield return RotateBoneOverTime(rightArm, rightArm.localRotation, waveA, 0.12f);
+                yield return RotateBoneOverTime(rightArm, waveA, waveB, 0.24f);
+                yield return RotateBoneOverTime(rightArm, waveB, armRaised, 0.12f);
+            }
+
+            // Lower arm back
+            if (rightLower != null)
+                yield return RotateBoneOverTime(rightLower, rightLower.localRotation, lowerRest, 0.15f);
+            yield return RotateBoneOverTime(rightArm, rightArm.localRotation, armRest, 0.25f);
+        }
+        else
+        {
+            // Fallback: body sway
+            float angle = 12f;
+            float speed = 0.2f;
+            for (int i = 0; i < 3; i++)
+            {
+                yield return RotateOverTime(Vector3.forward, angle, speed);
+                yield return RotateOverTime(Vector3.forward, -angle * 2f, speed * 2f);
+                yield return RotateOverTime(Vector3.forward, angle, speed);
+            }
         }
 
         ResetState();
@@ -193,15 +243,27 @@ public class EmoteAnimator : MonoBehaviour
         ResetState();
     }
 
-    /// <summary> Tilt to side (thinking) </summary>
+    /// <summary> Head tilt to side using bone (thinking) </summary>
     IEnumerator DoTiltSide()
     {
         isPlaying = true;
-        float angle = 12f;
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
 
-        yield return RotateOverTime(Vector3.forward, angle, 0.3f);
-        yield return new WaitForSeconds(0.8f);
-        yield return RotateOverTime(Vector3.forward, -angle, 0.3f);
+        if (head != null)
+        {
+            Quaternion rest = head.localRotation;
+            Quaternion tilted = rest * Quaternion.Euler(0f, 0f, 15f);
+            yield return RotateBoneOverTime(head, rest, tilted, 0.3f);
+            yield return new WaitForSeconds(0.8f);
+            yield return RotateBoneOverTime(head, tilted, rest, 0.3f);
+        }
+        else
+        {
+            float angle = 12f;
+            yield return RotateOverTime(Vector3.forward, angle, 0.3f);
+            yield return new WaitForSeconds(0.8f);
+            yield return RotateOverTime(Vector3.forward, -angle, 0.3f);
+        }
 
         ResetState();
     }
@@ -248,18 +310,34 @@ public class EmoteAnimator : MonoBehaviour
         ResetState();
     }
 
-    /// <summary> Head shake side to side (no/disagree) </summary>
+    /// <summary> Head shake side to side using bone (no/disagree) </summary>
     IEnumerator DoHeadShake()
     {
         isPlaying = true;
-        float angle = 10f;
-        float speed = 0.1f;
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
 
-        for (int i = 0; i < 3; i++)
+        if (head != null)
         {
-            yield return RotateOverTime(Vector3.up, angle, speed);
-            yield return RotateOverTime(Vector3.up, -angle * 2f, speed * 2f);
-            yield return RotateOverTime(Vector3.up, angle, speed);
+            Quaternion rest = head.localRotation;
+            for (int i = 0; i < 3; i++)
+            {
+                Quaternion left = rest * Quaternion.Euler(0f, -15f, 0f);
+                Quaternion right = rest * Quaternion.Euler(0f, 15f, 0f);
+                yield return RotateBoneOverTime(head, head.localRotation, left, 0.1f);
+                yield return RotateBoneOverTime(head, left, right, 0.2f);
+                yield return RotateBoneOverTime(head, right, rest, 0.1f);
+            }
+        }
+        else
+        {
+            float angle = 10f;
+            float speed = 0.1f;
+            for (int i = 0; i < 3; i++)
+            {
+                yield return RotateOverTime(Vector3.up, angle, speed);
+                yield return RotateOverTime(Vector3.up, -angle * 2f, speed * 2f);
+                yield return RotateOverTime(Vector3.up, angle, speed);
+            }
         }
 
         ResetState();
@@ -473,11 +551,31 @@ public class EmoteAnimator : MonoBehaviour
         transform.localScale = targetScale;
     }
 
+    /// <summary> Smoothly rotate a specific bone from one rotation to another. </summary>
+    IEnumerator RotateBoneOverTime(Transform bone, Quaternion from, Quaternion to, float duration)
+    {
+        if (bone == null) yield break;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, elapsed / duration);
+            bone.localRotation = Quaternion.Slerp(from, to, t);
+            yield return null;
+        }
+        bone.localRotation = to;
+    }
+
     private void ResetState()
     {
         transform.localPosition = originalPos;
         transform.localRotation = originalRot;
         transform.localScale = originalScale;
+
+        // Reset any bone animations back to the rest pose
+        if (poseManager != null)
+            poseManager.ResetToRestPose();
+
         isPlaying = false;
     }
 }
