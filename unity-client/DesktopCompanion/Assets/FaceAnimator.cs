@@ -118,27 +118,45 @@ public class FaceAnimator : MonoBehaviour
     {
         string lower = emote.ToLower().Trim();
 
+        // Joy — happy, energetic, positive
         if (lower.Contains("giggle") || lower.Contains("laugh") || lower.Contains("happy")
-            || lower.Contains("excited") || lower.Contains("chuckle"))
+            || lower.Contains("excited") || lower.Contains("chuckle") || lower.Contains("jump")
+            || lower.Contains("bounce") || lower.Contains("wave") || lower.Contains("nod")
+            || lower.Contains("clap") || lower.Contains("dance") || lower.Contains("cheer")
+            || lower.Contains("hooray") || lower.Contains("yay") || lower.Contains("raise")
+            || lower.Contains("hands up") || lower.Contains("celebrat") || lower.Contains("smile")
+            || lower.Contains("grin") || lower.Contains("beam") || lower.Contains("haha")
+            || lower.Contains("lol") || lower.Contains("nice") || lower.Contains("great"))
             SetEmotion("joy");
+        // Angry — frustrated, annoyed, stern
         else if (lower.Contains("angry") || lower.Contains("grr") || lower.Contains("frown")
-            || lower.Contains("frustrated"))
+            || lower.Contains("frustrat") || lower.Contains("mad") || lower.Contains("annoy")
+            || lower.Contains("cross") || lower.Contains("fold") || lower.Contains("stern")
+            || lower.Contains("hmph") || lower.Contains("pout") || lower.Contains("sulk")
+            || lower.Contains("shake") && lower.Contains("head"))
             SetEmotion("angry");
+        // Sorrow — sad, tired, deflated
         else if (lower.Contains("sad") || lower.Contains("sigh") || lower.Contains("tear")
-            || lower.Contains("cry") || lower.Contains("sorrow"))
+            || lower.Contains("cry") || lower.Contains("sorrow") || lower.Contains("sorry")
+            || lower.Contains("miss") || lower.Contains("yawn") || lower.Contains("tired")
+            || lower.Contains("sleepy") || lower.Contains("disappoint") || lower.Contains("down"))
             SetEmotion("sorrow");
+        // Fun — playful, shy, teasing
         else if (lower.Contains("blush") || lower.Contains("shy") || lower.Contains("embarrass")
-            || lower.Contains("wiggle") || lower.Contains("fun"))
+            || lower.Contains("wiggle") || lower.Contains("fun") || lower.Contains("peek")
+            || lower.Contains("sneak") || lower.Contains("hide") || lower.Contains("spin")
+            || lower.Contains("twirl") || lower.Contains("tease") || lower.Contains("wink")
+            || lower.Contains("fluster") || lower.Contains("nervous") || lower.Contains("fidget"))
             SetEmotion("fun");
-        else if (lower.Contains("yawn") || lower.Contains("tired") || lower.Contains("sleepy"))
-            SetEmotion("sorrow"); // Relaxed/droopy look
-        else if (lower.Contains("think") || lower.Contains("ponder") || lower.Contains("hmm"))
-            SetEmotion("neutral"); // Thoughtful = calm face
-        else if (lower.Contains("wave") || lower.Contains("nod") || lower.Contains("bounce")
-            || lower.Contains("jump"))
-            SetEmotion("joy"); // Positive actions = happy face
-        else if (lower.Contains("shake") || lower.Contains("no"))
-            SetEmotion("angry"); // Disagreement
+        // Thoughtful — calm, neutral
+        else if (lower.Contains("think") || lower.Contains("ponder") || lower.Contains("hmm")
+            || lower.Contains("chin") || lower.Contains("wonder") || lower.Contains("curious")
+            || lower.Contains("consider") || lower.Contains("contemplate"))
+            SetEmotion("neutral");
+        // Surprise — gasp, shock
+        else if (lower.Contains("gasp") || lower.Contains("shock") || lower.Contains("surprise")
+            || lower.Contains("whoa") || lower.Contains("wow") || lower.Contains("omg"))
+            SetEmotion("joy"); // Surprised-happy face
         else
             SetEmotion("fun"); // Default to a pleasant expression
     }

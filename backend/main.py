@@ -102,20 +102,22 @@ def chat(user_input, character="female_default"):
                 f"Respond naturally, like a character, not an assistant. "
                 f"But don't overdo the anime style, keep it balanced and natural. "
                 f"Keep responses short — 1 to 3 sentences max.\n"
-                f"You are very expressive and animated! ALWAYS include 1-2 action/emotes "
-                f"per reply using *asterisks*. You physically react to everything.\n"
-                f"Emote examples: *waves*, *nods*, *shakes head*, *thinks*, *points*, "
-                f"*crosses arms*, *facepalms*, *looks away*, *claps*, *stretches arms up*, "
-                f"*giggles*, *gasps*, *shrugs*, *leans forward*, *tilts head*, "
-                f"*rests chin on hand*, *raises hand*, *sighs*, *jumps excitedly*, "
-                f"*dances*, *blushes*, *pouts*, *peeks*. "
-                f"Pick emotes that match your mood. Put them naturally in your reply."
+                f"CRITICAL: You MUST include 1-2 physical emotes per reply in *asterisks*.\n"
+                f"Use ONLY short emotes from this list (pick the one that fits your mood):\n"
+                f"*waves* *nods* *shakes head* *thinks* *points* *crosses arms* "
+                f"*facepalms* *looks away* *claps* *stretches* *giggles* *gasps* "
+                f"*shrugs* *leans forward* *tilts head* *rests chin on hand* "
+                f"*raises hand* *sighs* *jumps* *dances* *blushes* *pouts* "
+                f"*peeks* *spins* *bounces* *yawns* *waves* *laughs*\n"
+                f"IMPORTANT: Keep emotes SHORT (1-3 words max). "
+                f"WRONG: *bounces up and down excitedly in seat* "
+                f"RIGHT: *bounces* or *jumps*"
             ),
         }
     ]
     # Add a few-shot example so the LLM locks onto the correct name
     messages.append({"role": "user", "content": "What should I call you?"})
-    messages.append({"role": "assistant", "content": f"I'm {char_name}! Nice to meet you~"})
+    messages.append({"role": "assistant", "content": f"*waves* I'm {char_name}! Nice to meet you~"})
 
     for u, a in reversed(history):
         messages.append({"role": "user", "content": u})
@@ -222,19 +224,21 @@ def chat_stream_api():
                     f"Respond naturally, like a character, not an assistant. "
                     f"But don't overdo the anime style, keep it balanced and natural. "
                     f"Keep responses short — 1 to 3 sentences max.\n"
-                    f"You are very expressive and animated! ALWAYS include 1-2 action/emotes "
-                    f"per reply using *asterisks*. You physically react to everything.\n"
-                    f"Emote examples: *waves*, *nods*, *shakes head*, *thinks*, *points*, "
-                    f"*crosses arms*, *facepalms*, *looks away*, *claps*, *stretches arms up*, "
-                    f"*giggles*, *gasps*, *shrugs*, *leans forward*, *tilts head*, "
-                    f"*rests chin on hand*, *raises hand*, *sighs*, *jumps excitedly*, "
-                    f"*dances*, *blushes*, *pouts*, *peeks*. "
-                    f"Pick emotes that match your mood. Put them naturally in your reply."
+                    f"CRITICAL: You MUST include 1-2 physical emotes per reply in *asterisks*.\n"
+                    f"Use ONLY short emotes from this list (pick the one that fits your mood):\n"
+                    f"*waves* *nods* *shakes head* *thinks* *points* *crosses arms* "
+                    f"*facepalms* *looks away* *claps* *stretches* *giggles* *gasps* "
+                    f"*shrugs* *leans forward* *tilts head* *rests chin on hand* "
+                    f"*raises hand* *sighs* *jumps* *dances* *blushes* *pouts* "
+                    f"*peeks* *spins* *bounces* *yawns* *waves* *laughs*\n"
+                    f"IMPORTANT: Keep emotes SHORT (1-3 words max). "
+                    f"WRONG: *bounces up and down excitedly in seat* "
+                    f"RIGHT: *bounces* or *jumps*"
                 ),
             }
         ]
         messages.append({"role": "user", "content": "What should I call you?"})
-        messages.append({"role": "assistant", "content": f"I'm {char_name}! Nice to meet you~"})
+        messages.append({"role": "assistant", "content": f"*waves* I'm {char_name}! Nice to meet you~"})
         for u, a in reversed(history):
             messages.append({"role": "user", "content": u})
             messages.append({"role": "assistant", "content": a})

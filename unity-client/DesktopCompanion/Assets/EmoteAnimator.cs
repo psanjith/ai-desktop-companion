@@ -30,6 +30,7 @@ public class EmoteAnimator : MonoBehaviour
 
     /// <summary>
     /// Trigger an emote animation by keyword.
+    /// Accepts any text — uses aggressive fuzzy matching to find the best animation.
     /// </summary>
     public void PlayEmote(string emote)
     {
@@ -37,64 +38,169 @@ public class EmoteAnimator : MonoBehaviour
 
         string lower = emote.ToLower().Trim();
 
-        // Map keywords to animations
-        if (lower.Contains("yawn"))
-            StartCoroutine(DoTiltBack());
-        else if (lower.Contains("nod"))
+        // Map keywords to animations — ordered from specific to general
+        // Bone-heavy animations listed first for priority
+
+        // HEAD BONE animations
+        if (lower.Contains("nod") || lower.Contains("agree") || lower.Contains("yes") || lower.Contains("mhm"))
             StartCoroutine(DoNod());
-        else if (lower.Contains("wave") || lower.Contains("greet") || lower.Contains("hi"))
-            StartCoroutine(DoWave());
-        else if (lower.Contains("giggle") || lower.Contains("laugh") || lower.Contains("chuckle"))
-            StartCoroutine(DoBounce());
-        else if (lower.Contains("sigh"))
-            StartCoroutine(DoDeflate());
-        else if (lower.Contains("stretch"))
-            StartCoroutine(DoStretch());
-        else if (lower.Contains("jump") || lower.Contains("excited") || lower.Contains("happy"))
-            StartCoroutine(DoJump());
-        else if (lower.Contains("think") || lower.Contains("ponder") || lower.Contains("hmm"))
-            StartCoroutine(DoTiltSide());
-        else if (lower.Contains("blush") || lower.Contains("shy") || lower.Contains("embarrass"))
-            StartCoroutine(DoWiggle());
-        else if (lower.Contains("blink") || lower.Contains("stare"))
-            StartCoroutine(DoSquash());
-        else if (lower.Contains("shrug"))
-            StartCoroutine(DoShrug());
-        else if (lower.Contains("shake") || lower.Contains("no") || lower.Contains("disagree"))
+        else if (lower.Contains("shake") && (lower.Contains("head") || lower.Contains("no"))
+            || lower.Contains("disagree") || lower.Contains("nuh") || lower.Contains("nope"))
             StartCoroutine(DoHeadShake());
-        else if (lower.Contains("spin") || lower.Contains("twirl"))
-            StartCoroutine(DoSpin());
-        else if (lower.Contains("dance") || lower.Contains("groove") || lower.Contains("sway"))
-            StartCoroutine(DoDance());
-        else if (lower.Contains("peek") || lower.Contains("hide") || lower.Contains("sneak"))
-            StartCoroutine(DoPeek());
-        else if (lower.Contains("pout") || lower.Contains("sulk") || lower.Contains("grumpy"))
-            StartCoroutine(DoPout());
-        else if (lower.Contains("clap") || lower.Contains("applaud") || lower.Contains("bravo"))
-            StartCoroutine(DoClap());
-        else if (lower.Contains("gasp") || lower.Contains("shock") || lower.Contains("surprise"))
-            StartCoroutine(DoGasp());
-        else if (lower.Contains("pat") || lower.Contains("comfort") || lower.Contains("hug"))
-            StartCoroutine(DoGentle());
-        else if (lower.Contains("point") || lower.Contains("look at") || lower.Contains("check"))
-            StartCoroutine(DoPoint());
-        else if (lower.Contains("facepalm") || lower.Contains("face palm") || lower.Contains("cringe"))
-            StartCoroutine(DoFacepalm());
-        else if (lower.Contains("look away") || lower.Contains("avoid") || lower.Contains("glance"))
+        else if (lower.Contains("think") || lower.Contains("ponder") || lower.Contains("hmm")
+            || lower.Contains("wonder") || lower.Contains("curious") || lower.Contains("consider"))
+            StartCoroutine(DoTiltSide());
+        else if (lower.Contains("tilt") || lower.Contains("cock") || lower.Contains("huh"))
+            StartCoroutine(DoTiltSide());
+        else if (lower.Contains("look away") || lower.Contains("avoid") || lower.Contains("glance")
+            || lower.Contains("turn away") || lower.Contains("avert"))
             StartCoroutine(DoLookAway());
-        else if (lower.Contains("chin") || lower.Contains("rest") || lower.Contains("hmm"))
-            StartCoroutine(DoChinRest());
-        else if (lower.Contains("cross") || lower.Contains("fold") || lower.Contains("arms"))
+
+        // ARM BONE animations
+        else if (lower.Contains("wave") || lower.Contains("greet") || lower.Contains("hello")
+            || lower.Contains("bye") || lower.Contains("hi ") || lower == "hi")
+            StartCoroutine(DoWave());
+        else if (lower.Contains("point") || lower.Contains("look at") || lower.Contains("check")
+            || lower.Contains("see") || lower.Contains("there") || lower.Contains("that"))
+            StartCoroutine(DoPoint());
+        else if (lower.Contains("cross") || lower.Contains("fold") || lower.Contains("arms")
+            || lower.Contains("stern") || lower.Contains("serious") || lower.Contains("wait"))
             StartCoroutine(DoCrossArms());
-        else if (lower.Contains("raise") || lower.Contains("hands up") || lower.Contains("celebrat"))
+        else if (lower.Contains("raise") || lower.Contains("hands up") || lower.Contains("celebrat")
+            || lower.Contains("hooray") || lower.Contains("woohoo") || lower.Contains("victory")
+            || lower.Contains("cheer"))
             StartCoroutine(DoHandsUp());
+        else if (lower.Contains("clap") || lower.Contains("applaud") || lower.Contains("bravo")
+            || lower.Contains("amazing") || lower.Contains("great job") || lower.Contains("nice"))
+            StartCoroutine(DoClap());
+        else if (lower.Contains("shrug") || lower.Contains("dunno") || lower.Contains("don't know")
+            || lower.Contains("idk") || lower.Contains("whatever"))
+            StartCoroutine(DoShrug());
+        else if (lower.Contains("stretch") || lower.Contains("yawn") || lower.Contains("tired")
+            || lower.Contains("sleepy") || lower.Contains("wak"))
+            StartCoroutine(DoStretch());
+        else if (lower.Contains("facepalm") || lower.Contains("face palm") || lower.Contains("cringe")
+            || lower.Contains("smh") || lower.Contains("oh no"))
+            StartCoroutine(DoFacepalm());
+        else if (lower.Contains("chin") || lower.Contains("rest") || lower.Contains("contemplate"))
+            StartCoroutine(DoChinRest());
+        else if (lower.Contains("pat") || lower.Contains("comfort") || lower.Contains("hug")
+            || lower.Contains("lean") || lower.Contains("forward") || lower.Contains("bow")
+            || lower.Contains("close"))
+            StartCoroutine(DoGentle());
+
+        // SPINE + FULL BODY bone animations
+        else if (lower.Contains("giggle") || lower.Contains("laugh") || lower.Contains("chuckle")
+            || lower.Contains("haha") || lower.Contains("lol") || lower.Contains("hehe")
+            || lower.Contains("snicker") || lower.Contains("amuse"))
+            StartCoroutine(DoBounce());
+        else if (lower.Contains("gasp") || lower.Contains("shock") || lower.Contains("surprise")
+            || lower.Contains("omg") || lower.Contains("whoa") || lower.Contains("wow")
+            || lower.Contains("really") || lower.Contains("what!"))
+            StartCoroutine(DoGasp());
+        else if (lower.Contains("pout") || lower.Contains("sulk") || lower.Contains("grumpy")
+            || lower.Contains("hmph") || lower.Contains("angry") || lower.Contains("annoy")
+            || lower.Contains("frustrat") || lower.Contains("mad"))
+            StartCoroutine(DoPout());
+        else if (lower.Contains("jump") || lower.Contains("excited") || lower.Contains("happy")
+            || lower.Contains("yay") || lower.Contains("bounces") || lower.Contains("bounce"))
+            StartCoroutine(DoJump());
+        else if (lower.Contains("spin") || lower.Contains("twirl") || lower.Contains("turn"))
+            StartCoroutine(DoSpin());
+        else if (lower.Contains("dance") || lower.Contains("groove") || lower.Contains("sway")
+            || lower.Contains("step") || lower.Contains("move") || lower.Contains("rhythm"))
+            StartCoroutine(DoDance());
+        else if (lower.Contains("peek") || lower.Contains("hide") || lower.Contains("sneak")
+            || lower.Contains("shy") || lower.Contains("embarrass") || lower.Contains("blush")
+            || lower.Contains("fluster"))
+            StartCoroutine(DoPeek());
+        else if (lower.Contains("sigh") || lower.Contains("sad") || lower.Contains("down")
+            || lower.Contains("disappoint") || lower.Contains("sorry") || lower.Contains("miss"))
+            StartCoroutine(DoDeflate());
+        else if (lower.Contains("wiggle") || lower.Contains("fidget") || lower.Contains("nervous")
+            || lower.Contains("squirm"))
+            StartCoroutine(DoWiggle());
+        else if (lower.Contains("smile") || lower.Contains("grin") || lower.Contains("beam")
+            || lower.Contains("warm") || lower.Contains("soft"))
+            StartCoroutine(DoNod()); // Warm smile = gentle nod
+        else if (lower.Contains("stare") || lower.Contains("blink") || lower.Contains("eye"))
+            StartCoroutine(DoSquash());
         else
-            StartCoroutine(DoBounce()); // Default: gentle bounce
+            StartCoroutine(DoBounce()); // Default: gentle bounce with head bob
 
         // Also trigger facial expression if FaceAnimator exists
         var faceAnim = GetComponent<FaceAnimator>();
         if (faceAnim != null)
             faceAnim.SetEmotionFromEmote(lower);
+    }
+
+    /// <summary>
+    /// Play a random body animation based on the detected emotion.
+    /// Called as a fallback guarantee — ensures EVERY response triggers bone movement.
+    /// </summary>
+    public void PlayEmotionAnimation(string emotion)
+    {
+        if (isPlaying) return;
+
+        string lower = (emotion ?? "neutral").ToLower();
+        int pick;
+
+        switch (lower)
+        {
+            case "joy":
+                pick = Random.Range(0, 5);
+                switch (pick)
+                {
+                    case 0: StartCoroutine(DoBounce()); break;
+                    case 1: StartCoroutine(DoJump()); break;
+                    case 2: StartCoroutine(DoClap()); break;
+                    case 3: StartCoroutine(DoHandsUp()); break;
+                    case 4: StartCoroutine(DoDance()); break;
+                }
+                break;
+            case "angry":
+                pick = Random.Range(0, 4);
+                switch (pick)
+                {
+                    case 0: StartCoroutine(DoCrossArms()); break;
+                    case 1: StartCoroutine(DoHeadShake()); break;
+                    case 2: StartCoroutine(DoPout()); break;
+                    case 3: StartCoroutine(DoFacepalm()); break;
+                }
+                break;
+            case "sorrow":
+                pick = Random.Range(0, 4);
+                switch (pick)
+                {
+                    case 0: StartCoroutine(DoDeflate()); break;
+                    case 1: StartCoroutine(DoLookAway()); break;
+                    case 2: StartCoroutine(DoGentle()); break;
+                    case 3: StartCoroutine(DoShrug()); break;
+                }
+                break;
+            case "fun":
+                pick = Random.Range(0, 5);
+                switch (pick)
+                {
+                    case 0: StartCoroutine(DoWiggle()); break;
+                    case 1: StartCoroutine(DoSpin()); break;
+                    case 2: StartCoroutine(DoPeek()); break;
+                    case 3: StartCoroutine(DoWave()); break;
+                    case 4: StartCoroutine(DoDance()); break;
+                }
+                break;
+            default: // neutral
+                pick = Random.Range(0, 5);
+                switch (pick)
+                {
+                    case 0: StartCoroutine(DoNod()); break;
+                    case 1: StartCoroutine(DoTiltSide()); break;
+                    case 2: StartCoroutine(DoChinRest()); break;
+                    case 3: StartCoroutine(DoPoint()); break;
+                    case 4: StartCoroutine(DoShrug()); break;
+                }
+                break;
+        }
     }
 
     // --- Emote Animations ---

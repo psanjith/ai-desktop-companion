@@ -303,11 +303,12 @@ public class CompanionController : MonoBehaviour
         var emoteAnimator = CharacterManager.Instance.GetEmoteAnimator();
         if (emoteAnimator == null) return;
 
-        // Play the first emote (one at a time looks best)
         if (emotes.Length > 0)
         {
-            Debug.Log($"Playing emote: {emotes[0]}");
-            emoteAnimator.PlayEmote(emotes[0]);
+            // Combine ALL emotes into one string for better keyword matching
+            string combined = string.Join(" ", emotes);
+            Debug.Log($"Playing emote (combined): {combined}");
+            emoteAnimator.PlayEmote(combined);
         }
     }
 
@@ -315,11 +316,33 @@ public class CompanionController : MonoBehaviour
     {
         if (CharacterManager.Instance == null) return;
 
+        // Always set facial expression
         var faceAnimator = CharacterManager.Instance.GetFaceAnimator();
-        if (faceAnimator == null) return;
+        if (faceAnimator != null)
+        {
+            Debug.Log($"Setting emotion: {emotion}");
+            faceAnimator.SetEmotion(emotion);
+        }
 
-        Debug.Log($"Setting emotion: {emotion}");
-        faceAnimator.SetEmotion(emotion);
+        // ALSO trigger body animation from emotion as a guaranteed fallback.
+        // This fires after a short delay so the emote animation can play first.
+        // If the emote is still playing, PlayEmotionAnimation will skip (isPlaying check).
+        var emoteAnimator = CharacterManager.Instance.GetEmoteAnimator();
+        if (emoteAnimator != null)
+        {
+            StartCoroutine(DelayedEmotionAnimation(emoteAnimator, emotion, 1.5f));
+        }
+    }
+
+    /// <summary>
+    /// Wait for any current emote to finish, then trigger an emotion-based body animation.
+    /// Guarantees visible bone movement on every single response.
+    /// </summary>
+    private IEnumerator DelayedEmotionAnimation(EmoteAnimator emoteAnimator, string emotion, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        // Only play if the previous emote animation has finished
+        emoteAnimator.PlayEmotionAnimation(emotion);
     }
 
     [System.Serializable]
