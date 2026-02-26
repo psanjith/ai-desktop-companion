@@ -1,8 +1,10 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using UnityEngine.Networking;
+using System.Text;
 
 public class CompanionController : MonoBehaviour
 {
@@ -13,6 +15,7 @@ public class CompanionController : MonoBehaviour
     public TMP_Text characterNameText; // Optional: shows current character name
 
     private string apiUrl = "http://127.0.0.1:5001/chat";
+    private string streamUrl = "http://127.0.0.1:5001/chat/stream";
 
     void Start()
     {
@@ -63,16 +66,43 @@ public class CompanionController : MonoBehaviour
             }
         }
 
-        // Set up text to auto-size within the bubble
+        // Set up text to fit properly in the bubble
         if (speechBubbleText != null)
         {
             speechBubbleText.enableWordWrapping = true;
-            speechBubbleText.overflowMode = TextOverflowModes.Ellipsis;
+            speechBubbleText.overflowMode = TextOverflowModes.Overflow;
             speechBubbleText.enableAutoSizing = true;
             speechBubbleText.fontSizeMin = 10;
             speechBubbleText.fontSizeMax = 20;
             speechBubbleText.alignment = TextAlignmentOptions.TopLeft;
             speechBubbleText.margin = new Vector4(8, 5, 8, 5);
+
+            // Make the bubble grow vertically to fit longer replies
+            var textFitter = speechBubbleText.GetComponent<ContentSizeFitter>();
+            if (textFitter == null)
+                textFitter = speechBubbleText.gameObject.AddComponent<ContentSizeFitter>();
+            textFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            textFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        }
+
+        // Make the speech bubble itself grow to match its text content
+        if (speechBubble != null)
+        {
+            var bubbleFitter = speechBubble.GetComponent<ContentSizeFitter>();
+            if (bubbleFitter == null)
+                bubbleFitter = speechBubble.AddComponent<ContentSizeFitter>();
+            bubbleFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            bubbleFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+            // Add a VerticalLayoutGroup so the bubble wraps around its children
+            var layout = speechBubble.GetComponent<VerticalLayoutGroup>();
+            if (layout == null)
+                layout = speechBubble.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(10, 10, 8, 8);
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
         }
 
         // Make Canvas scale with screen size so everything resizes with the window
@@ -156,7 +186,7 @@ public class CompanionController : MonoBehaviour
     IEnumerator SendToAI(string message)
     {
         if (speechBubbleText != null)
-            speechBubbleText.text = "...";
+            speechBubbleText.text = "";
         if (speechBubble != null)
             speechBubble.SetActive(true);
 
@@ -167,27 +197,82 @@ public class CompanionController : MonoBehaviour
         string jsonBody = JsonUtility.ToJson(new ChatRequest { message = message, character = charName });
         byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonBody);
 
-        using (UnityWebRequest req = new UnityWebRequest(apiUrl, "POST"))
+        // Use streaming endpoint — tokens arrive one at a time via SSE
+        using (UnityWebRequest req = new UnityWebRequest(streamUrl, "POST"))
         {
             req.uploadHandler = new UploadHandlerRaw(bodyRaw);
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Content-Type", "application/json");
 
-            yield return req.SendWebRequest();
+            req.SendWebRequest();
 
-            if (req.result == UnityWebRequest.Result.Success)
+            string fullRawText = "";
+            int lastProcessed = 0;
+
+            // Poll for incoming data while the request is in progress
+            while (!req.isDone)
             {
-                ChatResponse res = JsonUtility.FromJson<ChatResponse>(req.downloadHandler.text);
-                if (speechBubbleText != null)
-                    speechBubbleText.text = res.reply;
-
-                // Trigger emote animations on the character
-                if (res.emotes != null && res.emotes.Length > 0)
+                string currentData = req.downloadHandler?.text ?? "";
+                if (currentData.Length > lastProcessed)
                 {
-                    TriggerEmotes(res.emotes);
+                    // Process new SSE data lines
+                    string newData = currentData.Substring(lastProcessed);
+                    lastProcessed = currentData.Length;
+
+                    // Parse SSE lines: "data: {...}\n\n"
+                    string[] lines = newData.Split('\n');
+                    foreach (string line in lines)
+                    {
+                        string trimmed = line.Trim();
+                        if (trimmed.StartsWith("data: "))
+                        {
+                            string jsonStr = trimmed.Substring(6);
+                            try
+                            {
+                                // Check if this is a token or the final message
+                                if (jsonStr.Contains("\"done\""))
+                                {
+                                    // Final message with emotes — parse it
+                                    StreamDone done = JsonUtility.FromJson<StreamDone>(jsonStr);
+                                    if (done.emotes != null && done.emotes.Length > 0)
+                                    {
+                                        TriggerEmotes(done.emotes);
+                                    }
+                                    // Set clean reply (without emote markers)
+                                    if (!string.IsNullOrEmpty(done.reply))
+                                    {
+                                        speechBubbleText.text = done.reply;
+                                    }
+                                }
+                                else
+                                {
+                                    // It's a token chunk — append to display
+                                    StreamToken tok = JsonUtility.FromJson<StreamToken>(jsonStr);
+                                    if (tok.token != null)
+                                    {
+                                        fullRawText += tok.token;
+                                        // Strip complete emote markers *like this*
+                                        string display = System.Text.RegularExpressions.Regex.Replace(
+                                            fullRawText, @"\*[^*]+\*", "");
+                                        // Also hide any incomplete emote still being typed *like thi
+                                        display = System.Text.RegularExpressions.Regex.Replace(
+                                            display, @"\*[^*]*$", "");
+                                        display = System.Text.RegularExpressions.Regex.Replace(
+                                            display, @"\s{2,}", " ").Trim();
+                                        if (speechBubbleText != null)
+                                            speechBubbleText.text = display;
+                                    }
+                                }
+                            }
+                            catch (System.Exception) { /* skip malformed JSON */ }
+                        }
+                    }
                 }
+                yield return null; // Wait one frame
             }
-            else
+
+            // Handle any errors
+            if (req.result != UnityWebRequest.Result.Success)
             {
                 if (speechBubbleText != null)
                     speechBubbleText.text = "Connection error.";
@@ -221,6 +306,20 @@ public class CompanionController : MonoBehaviour
     [System.Serializable]
     private class ChatResponse
     {
+        public string reply;
+        public string[] emotes;
+    }
+
+    [System.Serializable]
+    private class StreamToken
+    {
+        public string token;
+    }
+
+    [System.Serializable]
+    private class StreamDone
+    {
+        public bool done;
         public string reply;
         public string[] emotes;
     }
