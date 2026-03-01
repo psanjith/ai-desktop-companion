@@ -13,113 +13,352 @@ public class CompanionController : MonoBehaviour
     public TMP_Text speechBubbleText;
     public GameObject speechBubble;
     public TMP_Text characterNameText; // Optional: shows current character name
+    public GameObject sendButton;
+    public GameObject switchButton;
 
     private string apiUrl = "http://127.0.0.1:5001/chat";
     private string streamUrl = "http://127.0.0.1:5001/chat/stream";
 
+    // Text chat toggle
+    private bool textChatVisible = false;
+    private bool hasPendingResponse = false; // true when speech bubble has content to show
+
+    // --- Design tokens ---
+    static readonly Color BgPanel     = new Color(0.07f, 0.07f, 0.11f, 0.88f); // near-black
+    static readonly Color BgInput     = new Color(0.12f, 0.12f, 0.18f, 0.95f); // slightly lighter
+    static readonly Color AccentColor = new Color(0.39f, 0.40f, 0.95f, 1.00f); // indigo
+    static readonly Color AccentDim   = new Color(0.28f, 0.29f, 0.75f, 1.00f); // indigo pressed
+    static readonly Color TextPrimary = new Color(0.95f, 0.95f, 1.00f, 1.00f); // near-white
+    static readonly Color TextMuted   = new Color(0.50f, 0.52f, 0.65f, 1.00f); // muted blue-gray
+
+    // Runtime refs to programmatic elements
+    private GameObject chatPanel;      // bottom bar
+    private GameObject toggleButton;   // 💬 button shown when chat is closed
+
     void Start()
     {
-        if (speechBubble != null)
-            speechBubble.SetActive(false);
-        else
-            Debug.LogWarning("CompanionController: speechBubble is not assigned!");
-
-        if (userInputField == null)
-            Debug.LogWarning("CompanionController: userInputField is not assigned!");
-
-        if (speechBubbleText == null)
-            Debug.LogWarning("CompanionController: speechBubbleText is not assigned!");
-
-        // Make input field text bigger and easier to read
-        if (userInputField != null)
-        {
-            // Bigger font
-            userInputField.textComponent.fontSize = 20;
-            userInputField.textComponent.color = Color.white;
-
-            // Bigger placeholder text too
-            if (userInputField.placeholder != null)
-            {
-                var placeholderText = userInputField.placeholder.GetComponent<TMP_Text>();
-                if (placeholderText != null)
-                {
-                    placeholderText.fontSize = 20;
-                    placeholderText.text = "Type here...";
-                }
-            }
-
-            // Make input background semi-transparent dark
-            var inputImage = userInputField.GetComponent<UnityEngine.UI.Image>();
-            if (inputImage != null)
-            {
-                inputImage.color = new Color(0.1f, 0.1f, 0.1f, 0.7f);
-            }
-        }
-
-        // Make speech bubble semi-transparent
-        if (speechBubble != null)
-        {
-            var bubbleImage = speechBubble.GetComponent<Image>();
-            if (bubbleImage != null)
-            {
-                bubbleImage.color = new Color(1f, 1f, 1f, 0.85f);
-            }
-        }
-
-        // Set up text to fit properly in the bubble
-        if (speechBubbleText != null)
-        {
-            speechBubbleText.enableWordWrapping = true;
-            speechBubbleText.overflowMode = TextOverflowModes.Overflow;
-            speechBubbleText.enableAutoSizing = true;
-            speechBubbleText.fontSizeMin = 10;
-            speechBubbleText.fontSizeMax = 20;
-            speechBubbleText.alignment = TextAlignmentOptions.TopLeft;
-            speechBubbleText.margin = new Vector4(8, 5, 8, 5);
-
-            // Make the bubble grow vertically to fit longer replies
-            var textFitter = speechBubbleText.GetComponent<ContentSizeFitter>();
-            if (textFitter == null)
-                textFitter = speechBubbleText.gameObject.AddComponent<ContentSizeFitter>();
-            textFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            textFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-        }
-
-        // Make the speech bubble itself grow to match its text content
-        if (speechBubble != null)
-        {
-            var bubbleFitter = speechBubble.GetComponent<ContentSizeFitter>();
-            if (bubbleFitter == null)
-                bubbleFitter = speechBubble.AddComponent<ContentSizeFitter>();
-            bubbleFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            bubbleFitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
-
-            // Add a VerticalLayoutGroup so the bubble wraps around its children
-            var layout = speechBubble.GetComponent<VerticalLayoutGroup>();
-            if (layout == null)
-                layout = speechBubble.AddComponent<VerticalLayoutGroup>();
-            layout.padding = new RectOffset(10, 10, 8, 8);
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = false;
-            layout.childControlWidth = true;
-            layout.childControlHeight = true;
-        }
-
-        // Make Canvas scale with screen size so everything resizes with the window
+        // Scale Canvas with screen
         Canvas canvas = GetComponentInParent<Canvas>();
         if (canvas == null) canvas = FindObjectOfType<Canvas>();
         if (canvas != null)
         {
             var scaler = canvas.GetComponent<CanvasScaler>();
-            if (scaler != null)
+            if (scaler == null) scaler = canvas.gameObject.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(800, 600);
+            scaler.matchWidthOrHeight = 0.5f;
+        }
+
+        StyleSpeechBubble();
+        BuildChatPanel(canvas);
+        BuildToggleButton(canvas);
+
+        UpdateCharacterNameUI();
+        SetTextChatVisible(false);
+    }
+
+    // ── Speech bubble ────────────────────────────────────────────────────────
+    private void StyleSpeechBubble()
+    {
+        if (speechBubble == null) return;
+
+        // Dark frosted-glass card
+        var bg = speechBubble.GetComponent<Image>() ?? speechBubble.AddComponent<Image>();
+        bg.color = BgPanel;
+
+        // Anchor top-center, sits above the character
+        var rect = speechBubble.GetComponent<RectTransform>();
+        if (rect != null)
+        {
+            rect.anchorMin = new Vector2(0.5f, 1f);
+            rect.anchorMax = new Vector2(0.5f, 1f);
+            rect.pivot     = new Vector2(0.5f, 1f);
+            rect.anchoredPosition = new Vector2(0f, -20f);
+            rect.sizeDelta = new Vector2(340f, 0f); // width fixed, height auto
+        }
+
+        // Layout group inside bubble
+        var layout = speechBubble.GetComponent<VerticalLayoutGroup>() ?? speechBubble.AddComponent<VerticalLayoutGroup>();
+        layout.padding = new RectOffset(16, 16, 12, 12);
+        layout.childForceExpandWidth  = true;
+        layout.childForceExpandHeight = false;
+        layout.childControlWidth  = true;
+        layout.childControlHeight = true;
+
+        // Bubble auto-height
+        var fitter = speechBubble.GetComponent<ContentSizeFitter>() ?? speechBubble.AddComponent<ContentSizeFitter>();
+        fitter.verticalFit   = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+
+        // Text styling
+        if (speechBubbleText != null)
+        {
+            speechBubbleText.color = TextPrimary;
+            speechBubbleText.fontSize = 15f;
+            speechBubbleText.enableWordWrapping = true;
+            speechBubbleText.overflowMode = TextOverflowModes.Overflow;
+            speechBubbleText.enableAutoSizing = false;
+            speechBubbleText.alignment = TextAlignmentOptions.TopLeft;
+            speechBubbleText.margin = Vector4.zero;
+
+            var tf = speechBubbleText.GetComponent<ContentSizeFitter>() ?? speechBubbleText.gameObject.AddComponent<ContentSizeFitter>();
+            tf.verticalFit   = ContentSizeFitter.FitMode.PreferredSize;
+            tf.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        }
+
+        speechBubble.SetActive(false);
+    }
+
+    // ── Bottom chat panel ────────────────────────────────────────────────────
+    private void BuildChatPanel(Canvas canvas)
+    {
+        if (canvas == null) return;
+
+        // Outer panel — full-width dark bar at bottom
+        chatPanel = new GameObject("ChatPanel");
+        chatPanel.transform.SetParent(canvas.transform, false);
+
+        var panelRect = chatPanel.AddComponent<RectTransform>();
+        panelRect.anchorMin = new Vector2(0, 0);
+        panelRect.anchorMax = new Vector2(1, 0);
+        panelRect.pivot     = new Vector2(0.5f, 0f);
+        panelRect.anchoredPosition = Vector2.zero;
+        panelRect.sizeDelta = new Vector2(0, 64f);
+
+        var panelBg = chatPanel.AddComponent<Image>();
+        panelBg.color = BgPanel;
+
+        var panelLayout = chatPanel.AddComponent<HorizontalLayoutGroup>();
+        panelLayout.padding = new RectOffset(12, 8, 10, 10);
+        panelLayout.spacing = 8f;
+        panelLayout.childForceExpandWidth  = false;
+        panelLayout.childForceExpandHeight = true;
+        panelLayout.childControlWidth  = true;
+        panelLayout.childControlHeight = true;
+        panelLayout.childAlignment = TextAnchor.MiddleLeft;
+
+        // ── Close / hide button (rightmost in panel) ──────────────────────
+        GameObject closeBtn = new GameObject("CloseButton");
+        closeBtn.transform.SetParent(chatPanel.transform, false);
+        var closeBg = closeBtn.AddComponent<Image>();
+        closeBg.color = BgInput;
+        var closeButton = closeBtn.AddComponent<Button>();
+        var closeCols = closeButton.colors;
+        closeCols.normalColor      = BgInput;
+        closeCols.highlightedColor = new Color(0.25f, 0.10f, 0.10f, 1f);
+        closeCols.pressedColor     = new Color(0.40f, 0.10f, 0.10f, 1f);
+        closeButton.colors = closeCols;
+        closeButton.onClick.AddListener(OnToggleChat);
+        var closeLE = closeBtn.AddComponent<LayoutElement>();
+        closeLE.minWidth = 36f; closeLE.preferredWidth = 36f;
+        closeLE.minHeight = 36f; closeLE.preferredHeight = 36f;
+        closeLE.flexibleWidth = 0f;
+        var closeIconObj = new GameObject("Icon");
+        closeIconObj.transform.SetParent(closeBtn.transform, false);
+        var closeIconRect = closeIconObj.AddComponent<RectTransform>();
+        closeIconRect.anchorMin = Vector2.zero; closeIconRect.anchorMax = Vector2.one;
+        closeIconRect.sizeDelta = Vector2.zero; closeIconRect.offsetMin = Vector2.zero; closeIconRect.offsetMax = Vector2.zero;
+        var closeIcon = closeIconObj.AddComponent<TextMeshProUGUI>();
+        closeIcon.text = "✕"; closeIcon.fontSize = 14f;
+        closeIcon.color = TextMuted; closeIcon.alignment = TextAlignmentOptions.Center;
+        closeIcon.enableWordWrapping = false;
+        closeBtn.transform.SetAsLastSibling(); // will be placed at end of layout
+
+        // Reparent existing input field into panel
+        if (userInputField != null)
+        {
+            userInputField.transform.SetParent(chatPanel.transform, false);
+
+            var inputRect = userInputField.GetComponent<RectTransform>();
+            var le = inputRect.GetComponent<LayoutElement>() ?? inputRect.gameObject.AddComponent<LayoutElement>();
+            le.flexibleWidth = 1f;
+            le.preferredHeight = 40f;
+            le.minHeight = 40f;
+
+            var inputBg = userInputField.GetComponent<Image>();
+            if (inputBg != null) inputBg.color = BgInput;
+
+            userInputField.textComponent.color   = TextPrimary;
+            userInputField.textComponent.fontSize = 15f;
+
+            if (userInputField.placeholder != null)
             {
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(800, 600);
-                scaler.matchWidthOrHeight = 0.5f; // Balanced scaling
+                var ph = userInputField.placeholder.GetComponent<TMP_Text>();
+                if (ph != null)
+                {
+                    ph.text     = "Message...";
+                    ph.fontSize = 15f;
+                    ph.color    = TextMuted;
+                }
             }
         }
 
-        UpdateCharacterNameUI();
+        // Reparent Send button into panel
+        if (sendButton != null)
+        {
+            sendButton.transform.SetParent(chatPanel.transform, false);
+
+            var sendRect = sendButton.GetComponent<RectTransform>();
+            var le = sendRect.GetComponent<LayoutElement>() ?? sendRect.gameObject.AddComponent<LayoutElement>();
+            le.minWidth      = 72f;
+            le.preferredWidth = 72f;
+            le.preferredHeight = 40f;
+            le.minHeight     = 40f;
+            le.flexibleWidth = 0f;
+
+            var sendBg = sendButton.GetComponent<Image>();
+            if (sendBg != null) sendBg.color = AccentColor;
+
+            var sendBtn = sendButton.GetComponent<Button>();
+            if (sendBtn != null)
+            {
+                var cols = sendBtn.colors;
+                cols.normalColor      = AccentColor;
+                cols.highlightedColor = new Color(0.50f, 0.51f, 1.00f, 1f);
+                cols.pressedColor     = AccentDim;
+                sendBtn.colors = cols;
+            }
+
+            var sendLabel = sendButton.GetComponentInChildren<TMP_Text>();
+            if (sendLabel != null)
+            {
+                sendLabel.text      = "Send";
+                sendLabel.color     = Color.white;
+                sendLabel.fontSize  = 14f;
+                sendLabel.fontStyle = FontStyles.Bold;
+                sendLabel.alignment = TextAlignmentOptions.Center;
+            }
+        }
+
+        // Reparent Switch button into panel (small, left of input)
+        if (switchButton != null)
+        {
+            switchButton.transform.SetParent(chatPanel.transform, false);
+            switchButton.transform.SetSiblingIndex(0); // before input field
+
+            var swRect = switchButton.GetComponent<RectTransform>();
+            var le = swRect.GetComponent<LayoutElement>() ?? swRect.gameObject.AddComponent<LayoutElement>();
+            le.minWidth       = 36f;
+            le.preferredWidth = 36f;
+            le.preferredHeight = 36f;
+            le.minHeight      = 36f;
+            le.flexibleWidth  = 0f;
+
+            var swBg = switchButton.GetComponent<Image>();
+            if (swBg != null) swBg.color = BgInput;
+
+            var swBtn = switchButton.GetComponent<Button>();
+            if (swBtn != null)
+            {
+                var cols = swBtn.colors;
+                cols.normalColor      = BgInput;
+                cols.highlightedColor = new Color(0.20f, 0.20f, 0.30f, 1f);
+                cols.pressedColor     = AccentDim;
+                swBtn.colors = cols;
+            }
+
+            var swLabel = switchButton.GetComponentInChildren<TMP_Text>();
+            if (swLabel != null)
+            {
+                swLabel.text      = "⇄";
+                swLabel.color     = TextMuted;
+                swLabel.fontSize  = 18f;
+                swLabel.alignment = TextAlignmentOptions.Center;
+            }
+        }
+
+        // Style character name (top-left of panel, outside layout)
+        if (characterNameText != null)
+        {
+            characterNameText.color    = TextMuted;
+            characterNameText.fontSize = 11f;
+            characterNameText.fontStyle = FontStyles.Bold;
+
+            var nameRect = characterNameText.GetComponent<RectTransform>();
+            if (nameRect != null)
+            {
+                nameRect.SetParent(chatPanel.transform, false);
+                nameRect.anchorMin = new Vector2(0f, 1f);
+                nameRect.anchorMax = new Vector2(0f, 1f);
+                nameRect.pivot     = new Vector2(0f, 0f);
+                nameRect.anchoredPosition = new Vector2(14f, 4f);
+                nameRect.sizeDelta = new Vector2(160f, 16f);
+            }
+        }
+    }
+
+    // ── Toggle button ────────────────────────────────────────────────────────
+    private void BuildToggleButton(Canvas canvas)
+    {
+        if (canvas == null) return;
+
+        toggleButton = new GameObject("ChatToggleButton");
+        toggleButton.transform.SetParent(canvas.transform, false);
+
+        var rect = toggleButton.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 0f);
+        rect.anchorMax = new Vector2(1f, 0f);
+        rect.pivot     = new Vector2(1f, 0f);
+        rect.anchoredPosition = new Vector2(-14f, 14f);
+        rect.sizeDelta = new Vector2(46f, 46f);
+
+        var bg = toggleButton.AddComponent<Image>();
+        bg.color = AccentColor;
+
+        var btn = toggleButton.AddComponent<Button>();
+        var cols = btn.colors;
+        cols.normalColor      = AccentColor;
+        cols.highlightedColor = new Color(0.50f, 0.51f, 1.00f, 1f);
+        cols.pressedColor     = AccentDim;
+        btn.colors = cols;
+        btn.onClick.AddListener(OnToggleChat);
+
+        var iconObj = new GameObject("Icon");
+        iconObj.transform.SetParent(toggleButton.transform, false);
+        var iconRect = iconObj.AddComponent<RectTransform>();
+        iconRect.anchorMin  = Vector2.zero;
+        iconRect.anchorMax  = Vector2.one;
+        iconRect.sizeDelta  = Vector2.zero;
+        iconRect.offsetMin  = Vector2.zero;
+        iconRect.offsetMax  = Vector2.zero;
+
+        var icon = iconObj.AddComponent<TextMeshProUGUI>();
+        icon.text      = "💬";
+        icon.fontSize  = 22f;
+        icon.alignment = TextAlignmentOptions.Center;
+        icon.enableWordWrapping = false;
+    }
+
+    /// <summary>
+    /// Called by the chat toggle button.
+    /// </summary>
+    public void OnToggleChat()
+    {
+        SetTextChatVisible(!textChatVisible);
+    }
+
+    public void SetTextChatVisible(bool visible)
+    {
+        textChatVisible = visible;
+
+        // Show/hide the whole bottom chat panel
+        if (chatPanel != null)
+            chatPanel.SetActive(visible);
+
+        // 💬 button always stays visible as a fallback
+        if (toggleButton != null)
+            toggleButton.SetActive(!visible);
+
+        // Speech bubble — only show if visible AND has content
+        if (speechBubble != null)
+            speechBubble.SetActive(visible && hasPendingResponse);
+
+        // Focus input when opening
+        if (visible && userInputField != null)
+        {
+            userInputField.ActivateInputField();
+            userInputField.Select();
+        }
     }
 
     /// <summary>
@@ -134,6 +373,7 @@ public class CompanionController : MonoBehaviour
             // Clear the speech bubble when switching characters
             if (speechBubbleText != null)
                 speechBubbleText.text = "";
+            hasPendingResponse = false;
             if (speechBubble != null)
                 speechBubble.SetActive(false);
 
@@ -187,7 +427,8 @@ public class CompanionController : MonoBehaviour
     {
         if (speechBubbleText != null)
             speechBubbleText.text = "";
-        if (speechBubble != null)
+        hasPendingResponse = true;
+        if (speechBubble != null && textChatVisible)
             speechBubble.SetActive(true);
 
         // Send current character so backend uses the right personality

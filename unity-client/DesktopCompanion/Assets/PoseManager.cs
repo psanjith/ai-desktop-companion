@@ -51,15 +51,17 @@ public class PoseManager : MonoBehaviour
     {
         if (animator == null) return;
 
+
+
         // --- Shoulders: slight downward drop ---
         SetBoneRotation(HumanBodyBones.LeftShoulder, new Vector3(0f, 0f, -5f));
         SetBoneRotation(HumanBodyBones.RightShoulder, new Vector3(0f, 0f, 5f));
 
-        // --- Upper arms: rotate down from T-pose (major fix) ---
-        // Left arm: rotate forward and down
-        SetBoneRotation(HumanBodyBones.LeftUpperArm, new Vector3(10f, 0f, 65f));
+        // --- Upper arms: closer to torso ---
+        // Left arm: rotate forward and down, closer to body
+        SetBoneRotation(HumanBodyBones.LeftUpperArm, new Vector3(10f, 0f, 75f));
         // Right arm: mirror
-        SetBoneRotation(HumanBodyBones.RightUpperArm, new Vector3(10f, 0f, -65f));
+        SetBoneRotation(HumanBodyBones.RightUpperArm, new Vector3(10f, 0f, -75f));
 
         // --- Lower arms: slight bend at elbow ---
         SetBoneRotation(HumanBodyBones.LeftLowerArm, new Vector3(-15f, 0f, 0f));

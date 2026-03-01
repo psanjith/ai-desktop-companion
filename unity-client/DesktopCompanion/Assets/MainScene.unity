@@ -627,6 +627,8 @@ MonoBehaviour:
   speechBubbleText: {fileID: 615732234}
   speechBubble: {fileID: 1026327313}
   characterNameText: {fileID: 0}
+  sendButton: {fileID: 390269843}
+  switchButton: {fileID: 1417641397}
 --- !u!4 &878514745
 Transform:
   m_ObjectHideFlags: 0
@@ -673,7 +675,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 29c1a862ddb534bbe9f27e3b09959b7e, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  moveSpeed: 5
+  sizeStep: 80
+  minSize: 300
+  maxSize: 1200
 --- !u!114 &878514748
 MonoBehaviour:
   m_ObjectHideFlags: 0
