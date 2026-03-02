@@ -34,6 +34,11 @@ public class CompanionController : MonoBehaviour
     // Runtime refs to programmatic elements
     private GameObject chatPanel;      // bottom bar
     private GameObject toggleButton;   // 💬 button shown when chat is closed
+    private Image micButtonImage;      // ref for colour pulsing when recording
+
+    // Exposed for VoiceInputManager
+    public Image  MicButtonImage    => micButtonImage;
+    public Color  InputBgColor      => BgInput;
 
     void Start()
     {
@@ -55,6 +60,10 @@ public class CompanionController : MonoBehaviour
 
         UpdateCharacterNameUI();
         SetTextChatVisible(false);
+
+        // Auto-attach VoiceInputManager if not already present
+        if (GetComponent<VoiceInputManager>() == null)
+            gameObject.AddComponent<VoiceInputManager>();
     }
 
     // ── Speech bubble ────────────────────────────────────────────────────────
@@ -159,7 +168,7 @@ public class CompanionController : MonoBehaviour
         closeIconRect.anchorMin = Vector2.zero; closeIconRect.anchorMax = Vector2.one;
         closeIconRect.sizeDelta = Vector2.zero; closeIconRect.offsetMin = Vector2.zero; closeIconRect.offsetMax = Vector2.zero;
         var closeIcon = closeIconObj.AddComponent<TextMeshProUGUI>();
-        closeIcon.text = "✕"; closeIcon.fontSize = 14f;
+        closeIcon.text = "X"; closeIcon.fontSize = 13f;
         closeIcon.color = TextMuted; closeIcon.alignment = TextAlignmentOptions.Center;
         closeIcon.enableWordWrapping = false;
         closeBtn.transform.SetAsLastSibling(); // will be placed at end of layout
@@ -230,6 +239,40 @@ public class CompanionController : MonoBehaviour
             }
         }
 
+        // ── Mic button (right of Send) ────────────────────────────────────
+        {
+            GameObject micBtn = new GameObject("MicButton");
+            micBtn.transform.SetParent(chatPanel.transform, false);
+            micButtonImage = micBtn.AddComponent<Image>();
+            micButtonImage.color = BgInput;
+            var micLE = micBtn.AddComponent<LayoutElement>();
+            micLE.minWidth = 40f; micLE.preferredWidth = 40f;
+            micLE.minHeight = 40f; micLE.preferredHeight = 40f;
+            micLE.flexibleWidth = 0f;
+            var micBtnComp = micBtn.AddComponent<Button>();
+            var micCols = micBtnComp.colors;
+            micCols.normalColor      = BgInput;
+            micCols.highlightedColor = new Color(0.20f, 0.20f, 0.30f, 1f);
+            micCols.pressedColor     = new Color(0.55f, 0.10f, 0.10f, 1f);
+            micBtnComp.colors = micCols;
+            micBtnComp.onClick.AddListener(() => {
+                var vim = GetComponent<VoiceInputManager>();
+                if (vim != null) vim.OnMicButtonPressed();
+            });
+            var micIconObj = new GameObject("Icon");
+            micIconObj.transform.SetParent(micBtn.transform, false);
+            var micIconRect = micIconObj.AddComponent<RectTransform>();
+            micIconRect.anchorMin = Vector2.zero; micIconRect.anchorMax = Vector2.one;
+            micIconRect.sizeDelta = Vector2.zero; micIconRect.offsetMin = Vector2.zero; micIconRect.offsetMax = Vector2.zero;
+            var micIcon = micIconObj.AddComponent<TextMeshProUGUI>();
+            micIcon.text = "MIC"; micIcon.fontSize = 11f;
+            micIcon.alignment = TextAlignmentOptions.Center;
+            micIcon.enableWordWrapping = false;
+
+            // Ensure close button stays last
+            closeBtn.transform.SetAsLastSibling();
+        }
+
         // Reparent Switch button into panel (small, left of input)
         if (switchButton != null)
         {
@@ -260,7 +303,7 @@ public class CompanionController : MonoBehaviour
             var swLabel = switchButton.GetComponentInChildren<TMP_Text>();
             if (swLabel != null)
             {
-                swLabel.text      = "⇄";
+                swLabel.text      = "<>";
                 swLabel.color     = TextMuted;
                 swLabel.fontSize  = 18f;
                 swLabel.alignment = TextAlignmentOptions.Center;
@@ -323,8 +366,9 @@ public class CompanionController : MonoBehaviour
         iconRect.offsetMax  = Vector2.zero;
 
         var icon = iconObj.AddComponent<TextMeshProUGUI>();
-        icon.text      = "💬";
-        icon.fontSize  = 22f;
+        icon.text      = "Chat";
+        icon.fontSize  = 13f;
+        icon.fontStyle = FontStyles.Bold;
         icon.alignment = TextAlignmentOptions.Center;
         icon.enableWordWrapping = false;
     }
@@ -349,9 +393,7 @@ public class CompanionController : MonoBehaviour
         if (toggleButton != null)
             toggleButton.SetActive(!visible);
 
-        // Speech bubble — only show if visible AND has content
-        if (speechBubble != null)
-            speechBubble.SetActive(visible && hasPendingResponse);
+        // Speech bubble is an independent HUD element — don't touch it here
 
         // Focus input when opening
         if (visible && userInputField != null)
@@ -359,6 +401,17 @@ public class CompanionController : MonoBehaviour
             userInputField.ActivateInputField();
             userInputField.Select();
         }
+    }
+
+    /// <summary>
+    /// Show a temporary status message in the speech bubble (used by VoiceInputManager).
+    /// </summary>
+    public void SetStatusText(string text)
+    {
+        if (speechBubbleText != null)
+            speechBubbleText.text = text;
+        if (speechBubble != null)
+            speechBubble.SetActive(!string.IsNullOrEmpty(text));
     }
 
     /// <summary>
@@ -428,7 +481,7 @@ public class CompanionController : MonoBehaviour
         if (speechBubbleText != null)
             speechBubbleText.text = "";
         hasPendingResponse = true;
-        if (speechBubble != null && textChatVisible)
+        if (speechBubble != null)
             speechBubble.SetActive(true);
 
         // Send current character so backend uses the right personality

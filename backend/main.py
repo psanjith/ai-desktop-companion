@@ -5,6 +5,15 @@ import re
 from flask import Flask, request, jsonify, Response, stream_with_context
 from ollama import Client
 
+# Pre-load Whisper model once at startup — avoids ~2s reload on every /transcribe call
+try:
+    from faster_whisper import WhisperModel
+    _whisper_model = WhisperModel("tiny", device="cpu", compute_type="int8")
+    print("[Whisper] Model loaded and ready.")
+except Exception as _e:
+    _whisper_model = None
+    print(f"[Whisper] Failed to load model: {_e}")
+
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PERSONALITIES_PATH = os.path.join(BASE_DIR, "personalities.json")
@@ -301,6 +310,39 @@ def chat_stream_api():
                 "X-Accel-Buffering": "no",
             }
         )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/transcribe", methods=["POST"])
+def transcribe_audio():
+    """Receive a WAV audio file from Unity and return transcribed text via faster-whisper."""
+    try:
+        import tempfile
+
+        if _whisper_model is None:
+            return jsonify({"error": "Whisper model not loaded"}), 500
+
+        if "audio" not in request.files:
+            return jsonify({"error": "No audio file provided"}), 400
+
+        audio_file = request.files["audio"]
+
+        # Save to a temp file
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_path = tmp.name
+            audio_file.save(tmp_path)
+
+        segments, _ = _whisper_model.transcribe(tmp_path, beam_size=1, language="en")
+        transcript = " ".join(seg.text.strip() for seg in segments).strip()
+
+        os.remove(tmp_path)
+
+        print(f"[Transcribe] '{transcript}'")
+        return jsonify({"text": transcript})
+
     except Exception as e:
         import traceback
         traceback.print_exc()
