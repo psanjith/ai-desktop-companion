@@ -82,6 +82,28 @@ public class CharacterManager : MonoBehaviour
         // Add idle animation
         SetupIdleAnimation(currentModel);
 
+        // Determine personality style from prefab name:
+        //   contains "male" (not "female") → Reserved (Ren: subtle, deliberate)
+        //   everything else               → Expressive (Luna: big, varied)
+        string prefabId = characterPrefabs[index].name.ToLower();
+        bool isReserved = prefabId.Contains("male") && !prefabId.Contains("female");
+
+        var emoteAnim = currentModel.GetComponent<EmoteAnimator>();
+        if (emoteAnim != null)
+            emoteAnim.style = isReserved
+                ? EmoteAnimator.CharacterStyle.Reserved
+                : EmoteAnimator.CharacterStyle.Expressive;
+
+        // Tune idle animation amplitude to match personality
+        var idleAnim = currentModel.GetComponent<IdleAnimator>();
+        if (idleAnim != null && isReserved)
+        {
+            idleAnim.headTiltAmount = 2f;   // Luna=4f  — Ren barely tilts his head
+            idleAnim.headTurnAmount = 3.5f; // Luna=6f  — Ren looks around less
+            idleAnim.swayAmount     = 1.2f; // Luna=3f  — Ren stands more composed
+            idleAnim.armSwayAmount  = 0.8f; // Luna=2f  — Ren's arms are stiller at rest
+        }
+
         currentCharacterIndex = index;
         PlayerPrefs.SetInt("SelectedCharacter", index);
         PlayerPrefs.Save();

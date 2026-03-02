@@ -18,6 +18,14 @@ public class EmoteAnimator : MonoBehaviour
     private IdleAnimator idleAnimator;
     private Coroutine gestureLoopRef;
 
+    /// <summary>
+    /// Animation personality. Set by CharacterManager when the character loads.
+    /// Expressive = Luna (big, varied, physically reactive).
+    /// Reserved   = Ren  (subtle, deliberate, understated).
+    /// </summary>
+    public enum CharacterStyle { Expressive, Reserved }
+    public CharacterStyle style = CharacterStyle.Expressive;
+
     // --- Context-aware gesture tracking ---
     private string currentStreamText = "";    // accumulated text from streaming
     private int lastGestureTextPos = 0;       // position in text when last gesture fired
@@ -153,6 +161,38 @@ public class EmoteAnimator : MonoBehaviour
         lastGestureCategory = category;
 
         Debug.Log($"EmoteAnimator: Context gesture cat={category} text='{recentText.Substring(0, Mathf.Min(40, recentText.Length))}'");
+
+        // Reserved style (Ren): subtle head/body-only gestures — no big arm waves
+        if (style == CharacterStyle.Reserved)
+        {
+            switch (category)
+            {
+                case 0: yield return GestureHeadTilt(); break;
+                case 1: yield return GestureSmallNod(); break;
+                case 2:
+                    if (Random.value > 0.5f) yield return GestureHandOut();
+                    else yield return GestureHeadTurn();
+                    break;
+                case 3: yield return GestureHandToChest(); break;
+                case 4: yield return GestureShoulderLift(); break;
+                case 5: yield return GestureSmallNod(); break; // plays it cool, no hand raise
+                case 6: yield return GestureSmallHeadShake(); break;
+                case 7:
+                    if (Random.value > 0.5f) yield return GestureChin();
+                    else yield return GestureHeadTilt();
+                    break;
+                default:
+                    int rRes = Random.Range(0, 3);
+                    if (rRes == 0) yield return GestureHeadTurn();
+                    else if (rRes == 1) yield return GestureBodyShift();
+                    else yield return GestureSmallNod();
+                    break;
+            }
+            if (poseManager != null) yield return poseManager.SmoothResetToRestPose(0.35f);
+            if (idleAnimator != null) idleAnimator.paused = false;
+            isGesturing = false;
+            yield break;
+        }
 
         switch (category)
         {
@@ -312,6 +352,52 @@ public class EmoteAnimator : MonoBehaviour
     // --- Talking Gesture Coroutines ---
     // Each gesture adds micro-variation to timing and amplitude so no two
     // repetitions ever look identical — essential for humanlike feel.
+
+    /// <summary>
+    /// For Reserved characters (Ren): remap high-energy emote keywords to calm equivalents.
+    /// Returns true if handled so PlayEmote() can skip the standard chain.
+    /// </summary>
+    private bool TryPlayReservedEmote(string lower)
+    {
+        // Greetings / waves → single acknowledging nod
+        if (lower.Contains("wave") || lower.Contains("greet") || lower.Contains("hello")
+            || lower.Contains("bye") || lower.Contains("hi ") || lower == "hi")
+        { StartCoroutine(DoNod()); return true; }
+
+        // High-energy excitement → cool shrug ("yeah, sure")
+        if (lower.Contains("jump") || lower.Contains("excited") || lower.Contains("yay")
+            || lower.Contains("hooray") || lower.Contains("woohoo") || lower.Contains("happy")
+            || lower.Contains("joyful") || lower.Contains("overjoyed") || lower.Contains("bounce"))
+        { StartCoroutine(DoShrug()); return true; }
+
+        // Dancing / spinning → look away (too cool for that)
+        if (lower.Contains("dance") || lower.Contains("spin") || lower.Contains("twirl")
+            || lower.Contains("wiggle") || lower.Contains("sway") || lower.Contains("groove"))
+        { StartCoroutine(DoLookAway()); return true; }
+
+        // Laughter → dry chin rest (amused but composed)
+        if (lower.Contains("giggle") || lower.Contains("laugh") || lower.Contains("chuckle")
+            || lower.Contains("haha") || lower.Contains("lol") || lower.Contains("hehe")
+            || lower.Contains("snicker") || lower.Contains("amuse"))
+        { StartCoroutine(DoChinRest()); return true; }
+
+        // Celebrations / cheering → single approval nod
+        if (lower.Contains("clap") || lower.Contains("applaud") || lower.Contains("cheer")
+            || lower.Contains("celebrat") || lower.Contains("bravo") || lower.Contains("hands up")
+            || lower.Contains("victory"))
+        { StartCoroutine(DoNod()); return true; }
+
+        // Blushing / shyness → plays it cool, looks away
+        if (lower.Contains("blush") || lower.Contains("peek") || lower.Contains("shy")
+            || lower.Contains("embarrass") || lower.Contains("fluster"))
+        { StartCoroutine(DoLookAway()); return true; }
+
+        // Both-arms big wave / flailing → shrug
+        if (lower.Contains("big wave") || lower.Contains("wave both") || lower.Contains("flail"))
+        { StartCoroutine(DoShrug()); return true; }
+
+        return false; // Standard chain handles everything else (cross arms, shrug, look away, etc.)
+    }
 
     /// <summary> Add ±12% random variation to a duration for natural imprecision. </summary>
     private float Vary(float value) { return value * Random.Range(0.88f, 1.12f); }
@@ -727,6 +813,14 @@ public class EmoteAnimator : MonoBehaviour
         string lower = emote.ToLower().Trim();
         Debug.Log($"EmoteAnimator.PlayEmote: '{lower}'");
 
+        // Reserved style: intercept high-energy emotes before standard keyword chain
+        if (style == CharacterStyle.Reserved && TryPlayReservedEmote(lower))
+        {
+            var faceAnimR = GetComponent<FaceAnimator>();
+            if (faceAnimR != null) faceAnimR.SetEmotionFromEmote(lower);
+            return;
+        }
+
         // Map keywords to animations — ordered from specific to general
         // Bone-heavy animations listed first for priority
 
@@ -845,6 +939,67 @@ public class EmoteAnimator : MonoBehaviour
 
         string lower = (emotion ?? "neutral").ToLower();
         int pick;
+
+        // Reserved style (Ren): calm, understated reactions — no jumping or dancing
+        if (style == CharacterStyle.Reserved)
+        {
+            switch (lower)
+            {
+                case "joy": // Restrained satisfaction
+                    pick = Random.Range(0, 4);
+                    switch (pick)
+                    {
+                        case 0: StartCoroutine(DoNod()); break;
+                        case 1: StartCoroutine(DoChinRest()); break;
+                        case 2: StartCoroutine(DoTiltSide()); break;
+                        case 3: StartCoroutine(DoShrug()); break;
+                    }
+                    break;
+                case "angry": // His thing — deliberate and contained
+                    pick = Random.Range(0, 4);
+                    switch (pick)
+                    {
+                        case 0: StartCoroutine(DoCrossArms()); break;
+                        case 1: StartCoroutine(DoFacepalm()); break;
+                        case 2: StartCoroutine(DoHeadShake()); break;
+                        case 3: StartCoroutine(DoPout()); break;
+                    }
+                    break;
+                case "sorrow": // Quiet, no drama
+                    pick = Random.Range(0, 4);
+                    switch (pick)
+                    {
+                        case 0: StartCoroutine(DoDeflate()); break;
+                        case 1: StartCoroutine(DoLookAway()); break;
+                        case 2: StartCoroutine(DoShrug()); break;
+                        case 3: StartCoroutine(DoChinRest()); break;
+                    }
+                    break;
+                case "fun": // Plays it cool — sneaky/smug rather than giddy
+                    pick = Random.Range(0, 5);
+                    switch (pick)
+                    {
+                        case 0: StartCoroutine(DoPeek()); break;
+                        case 1: StartCoroutine(DoShrug()); break;
+                        case 2: StartCoroutine(DoCrossArms()); break;
+                        case 3: StartCoroutine(DoLookAway()); break;
+                        case 4: StartCoroutine(DoThinking()); break;
+                    }
+                    break;
+                default: // Neutral — composed, observant
+                    pick = Random.Range(0, 5);
+                    switch (pick)
+                    {
+                        case 0: StartCoroutine(DoNod()); break;
+                        case 1: StartCoroutine(DoTiltSide()); break;
+                        case 2: StartCoroutine(DoChinRest()); break;
+                        case 3: StartCoroutine(DoShrug()); break;
+                        case 4: StartCoroutine(DoLookAway()); break;
+                    }
+                    break;
+            }
+            return;
+        }
 
         switch (lower)
         {

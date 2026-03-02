@@ -38,7 +38,7 @@ def detect_emotion(text, emotes):
     angry_words = ["angry", "grr", "ugh", "annoy", "frustrat", "mad", "hate",
                    "shake", "frown", "no way"]
     sad_words = ["sad", "sigh", "sorry", "miss", "lonely", "cry", "tear",
-                 "unfortunat", "sorrow", "down"]
+                 "unfortunate", "sorrow", "down"]
     fun_words = ["tease", "wink", "blush", "shy", "playful", "heh", "wiggle",
                  "poke", "cheeky", "fluster", "embarrass", "fun", "silly"]
 
@@ -112,15 +112,10 @@ def chat(user_input, character="female_default"):
                 f"But don't overdo the anime style, keep it balanced and natural. "
                 f"Keep responses short — 1 to 3 sentences max.\n"
                 f"CRITICAL: You MUST include 1-2 physical emotes per reply in *asterisks*.\n"
-                f"Use ONLY short emotes from this list (pick the one that fits your mood):\n"
-                f"*waves* *nods* *shakes head* *thinks* *points* *crosses arms* "
-                f"*facepalms* *looks away* *claps* *stretches* *giggles* *gasps* "
-                f"*shrugs* *leans forward* *tilts head* *rests chin on hand* "
-                f"*raises hand* *sighs* *jumps* *dances* *blushes* *pouts* "
-                f"*peeks* *spins* *bounces* *yawns* *waves* *laughs*\n"
+                f"Use ONLY emotes from this list: {personality.get('emote_list', '*nods* *shrugs* *tilts head*')}\n"
                 f"IMPORTANT: Keep emotes SHORT (1-3 words max). "
                 f"WRONG: *bounces up and down excitedly in seat* "
-                f"RIGHT: *bounces* or *jumps*"
+                f"RIGHT: *bounces* or *nods*"
             ),
         }
     ]
@@ -234,15 +229,10 @@ def chat_stream_api():
                     f"But don't overdo the anime style, keep it balanced and natural. "
                     f"Keep responses short — 1 to 3 sentences max.\n"
                     f"CRITICAL: You MUST include 1-2 physical emotes per reply in *asterisks*.\n"
-                    f"Use ONLY short emotes from this list (pick the one that fits your mood):\n"
-                    f"*waves* *nods* *shakes head* *thinks* *points* *crosses arms* "
-                    f"*facepalms* *looks away* *claps* *stretches* *giggles* *gasps* "
-                    f"*shrugs* *leans forward* *tilts head* *rests chin on hand* "
-                    f"*raises hand* *sighs* *jumps* *dances* *blushes* *pouts* "
-                    f"*peeks* *spins* *bounces* *yawns* *waves* *laughs*\n"
+                    f"Use ONLY emotes from this list: {personality.get('emote_list', '*nods* *shrugs* *tilts head*')}\n"
                     f"IMPORTANT: Keep emotes SHORT (1-3 words max). "
                     f"WRONG: *bounces up and down excitedly in seat* "
-                    f"RIGHT: *bounces* or *jumps*"
+                    f"RIGHT: *bounces* or *nods*"
                 ),
             }
         ]
