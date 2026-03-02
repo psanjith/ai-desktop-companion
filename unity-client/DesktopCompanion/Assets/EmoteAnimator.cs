@@ -168,12 +168,14 @@ public class EmoteAnimator : MonoBehaviour
                 else
                     yield return GestureLeanForward();
                 break;
-            case 2: // Explaining — hand out or both hands out
-                if (Random.value > 0.5f)
-                    yield return GestureHandOut();
-                else
-                    yield return GestureBothHandsOut();
+            case 2: // Explaining — hand out, both hands out, or finger point
+            {
+                int r2 = Random.Range(0, 3);
+                if (r2 == 0) yield return GestureHandOut();
+                else if (r2 == 1) yield return GestureBothHandsOut();
+                else yield return GestureFingerPoint();
                 break;
+            }
             case 3: // Self-reference — hand to chest
                 yield return GestureHandToChest();
                 break;
@@ -195,18 +197,23 @@ public class EmoteAnimator : MonoBehaviour
                 else
                     yield return GestureShoulderLift();
                 break;
-            case 7: // Thinking/pondering — head tilt + lean
-                if (Random.value > 0.5f)
-                    yield return GestureHeadTilt();
-                else
-                    yield return GestureHandToChest();
+            case 7: // Thinking/pondering — head tilt, hand to chest, or chin touch
+            {
+                int r7 = Random.Range(0, 3);
+                if (r7 == 0) yield return GestureHeadTilt();
+                else if (r7 == 1) yield return GestureHandToChest();
+                else yield return GestureChin();
                 break;
-            default: // Conversational/neutral — nod, lean, body shift
-                int pick = Random.Range(0, 3);
-                if (pick == 0) yield return GestureSmallNod();
-                else if (pick == 1) yield return GestureLeanForward();
-                else yield return GestureBodyShift();
+            }
+            default: // Conversational/neutral — nod, lean, body shift, or head bob
+            {
+                int rD = Random.Range(0, 4);
+                if (rD == 0) yield return GestureSmallNod();
+                else if (rD == 1) yield return GestureLeanForward();
+                else if (rD == 2) yield return GestureBodyShift();
+                else yield return GestureHeadBob();
                 break;
+            }
         }
 
         // Smooth cleanup after gesture — blend bones back instead of snapping
@@ -620,6 +627,87 @@ public class EmoteAnimator : MonoBehaviour
         }
     }
 
+    /// <summary> Arm extends forward in a pointing gesture — explaining or directing attention </summary>
+    IEnumerator GestureFingerPoint()
+    {
+        bool useRight = Random.value > 0.4f; // favour right hand
+        Transform arm   = poseManager?.GetBone(useRight ? HumanBodyBones.RightUpperArm : HumanBodyBones.LeftUpperArm);
+        Transform lower = poseManager?.GetBone(useRight ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
+        Transform hand  = poseManager?.GetBone(useRight ? HumanBodyBones.RightHand     : HumanBodyBones.LeftHand);
+        if (arm == null) yield break;
+
+        Quaternion aRest = arm.localRotation;
+        Quaternion lRest = lower != null ? lower.localRotation : Quaternion.identity;
+        Quaternion hRest = hand  != null ? hand.localRotation  : Quaternion.identity;
+
+        float side = useRight ? -1f : 1f;
+        // Arm extends forward and slightly out, elbow less bent, wrist nearly straight
+        Quaternion aPoint = aRest  * Quaternion.Euler(VaryAngle(-50f), VaryAngle(8f) * side, VaryAngle(22f) * side);
+        Quaternion lPoint = lRest  * Quaternion.Euler(VaryAngle(-30f), 0f, 0f);
+        Quaternion hPoint = hRest  * Quaternion.Euler(VaryAngle(-15f), 0f, 0f);
+
+        float dur = Vary(0.4f);
+        StartCoroutine(RotateBoneOverTime(arm, aRest, aPoint, dur));
+        if (lower != null) StartCoroutine(RotateBoneDelayed(lower, lRest, lPoint, dur * 0.85f, Vary(0.07f)));
+        if (hand  != null) StartCoroutine(RotateBoneDelayed(hand,  hRest, hPoint, dur * 0.75f, Vary(0.1f)));
+        yield return new WaitForSeconds(dur + 0.05f);
+        yield return new WaitForSeconds(Vary(0.5f));
+        dur = Vary(0.45f);
+        StartCoroutine(RotateBoneOverTime(arm, aPoint, aRest, dur));
+        if (lower != null) StartCoroutine(RotateBoneDelayed(lower, lPoint, lRest, dur * 0.85f, Vary(0.07f)));
+        if (hand  != null) StartCoroutine(RotateBoneDelayed(hand,  hPoint, hRest, dur * 0.75f, Vary(0.1f)));
+        yield return new WaitForSeconds(dur + 0.05f);
+    }
+
+    /// <summary> Rhythmic small head bobs — natural beat-keeping during speech </summary>
+    IEnumerator GestureHeadBob()
+    {
+        Transform head = poseManager?.GetBone(HumanBodyBones.Head);
+        if (head == null) yield break;
+        Quaternion rest = head.localRotation;
+        int bobs = Random.Range(2, 4);
+        for (int i = 0; i < bobs; i++)
+        {
+            float depth = VaryAngle(12f);
+            float spd   = Vary(0.14f);
+            Quaternion down = rest * Quaternion.Euler(depth, 0f, 0f);
+            yield return RotateBoneOverTime(head, rest, down, spd);
+            yield return RotateBoneOverTime(head, down, rest, spd * Vary(1f));
+            yield return new WaitForSeconds(Vary(0.08f));
+        }
+    }
+
+    /// <summary> Hand lifts to chin height with head lean — thoughtful listening gesture </summary>
+    IEnumerator GestureChin()
+    {
+        bool useRight = Random.value > 0.5f;
+        Transform arm   = poseManager?.GetBone(useRight ? HumanBodyBones.RightUpperArm : HumanBodyBones.LeftUpperArm);
+        Transform lower = poseManager?.GetBone(useRight ? HumanBodyBones.RightLowerArm : HumanBodyBones.LeftLowerArm);
+        Transform head  = poseManager?.GetBone(HumanBodyBones.Head);
+        if (arm == null) yield break;
+
+        Quaternion aRest = arm.localRotation;
+        Quaternion lRest = lower != null ? lower.localRotation : Quaternion.identity;
+        Quaternion hRest = head  != null ? head.localRotation  : Quaternion.identity;
+
+        float side = useRight ? -1f : 1f;
+        Quaternion aChin = aRest * Quaternion.Euler(VaryAngle(-55f), VaryAngle(15f) * side, VaryAngle(-28f) * side);
+        Quaternion lBent = lRest * Quaternion.Euler(VaryAngle(-80f), 0f, 0f);
+        Quaternion hTilt = hRest * Quaternion.Euler(VaryAngle(3f),   0f, VaryAngle(-7f) * side);
+
+        float dur = Vary(0.5f);
+        StartCoroutine(RotateBoneOverTime(arm, aRest, aChin, dur));
+        if (lower != null) StartCoroutine(RotateBoneDelayed(lower, lRest, lBent, dur * 0.86f, Vary(0.08f)));
+        if (head  != null) StartCoroutine(RotateBoneDelayed(head,  hRest, hTilt, dur * 0.7f,  Vary(0.1f)));
+        yield return new WaitForSeconds(dur + 0.05f);
+        yield return new WaitForSeconds(Vary(0.55f));
+        dur = Vary(0.5f);
+        StartCoroutine(RotateBoneOverTime(arm, aChin, aRest, dur));
+        if (lower != null) StartCoroutine(RotateBoneDelayed(lower, lBent, lRest, dur * 0.86f, Vary(0.08f)));
+        if (head  != null) StartCoroutine(RotateBoneDelayed(head,  hTilt, hRest, dur * 0.7f,  Vary(0.1f)));
+        yield return new WaitForSeconds(dur + 0.05f);
+    }
+
     // ===================== Full Emote System =====================
     /// <summary>
     /// Trigger a full emote animation by keyword.
@@ -650,7 +738,7 @@ public class EmoteAnimator : MonoBehaviour
             StartCoroutine(DoHeadShake());
         else if (lower.Contains("think") || lower.Contains("ponder") || lower.Contains("hmm")
             || lower.Contains("wonder") || lower.Contains("curious") || lower.Contains("consider"))
-            StartCoroutine(DoTiltSide());
+            StartCoroutine(DoThinking());
         else if (lower.Contains("tilt") || lower.Contains("cock") || lower.Contains("huh"))
             StartCoroutine(DoTiltSide());
         else if (lower.Contains("look away") || lower.Contains("avoid") || lower.Contains("glance")
@@ -704,15 +792,18 @@ public class EmoteAnimator : MonoBehaviour
             || lower.Contains("haha") || lower.Contains("lol") || lower.Contains("hehe")
             || lower.Contains("snicker") || lower.Contains("amuse"))
             StartCoroutine(DoBounce());
-        else if (lower.Contains("gasp") || lower.Contains("shock") || lower.Contains("surprise")
-            || lower.Contains("omg") || lower.Contains("whoa") || lower.Contains("wow")
+        else if (lower.Contains("surprise") || lower.Contains("startl") || lower.Contains("shocked"))
+            StartCoroutine(DoSurprise());
+        else if (lower.Contains("gasp") || lower.Contains("omg") || lower.Contains("whoa") || lower.Contains("wow")
             || lower.Contains("really") || lower.Contains("what!"))
             StartCoroutine(DoGasp());
         else if (lower.Contains("pout") || lower.Contains("sulk") || lower.Contains("grumpy")
             || lower.Contains("hmph") || lower.Contains("angry") || lower.Contains("annoy")
             || lower.Contains("frustrat") || lower.Contains("mad"))
             StartCoroutine(DoPout());
-        else if (lower.Contains("jump") || lower.Contains("excited") || lower.Contains("happy")
+        else if (lower.Contains("happy") || lower.Contains("joyful") || lower.Contains("overjoyed"))
+            StartCoroutine(DoHappy());
+        else if (lower.Contains("jump") || lower.Contains("excited")
             || lower.Contains("yay") || lower.Contains("bounces") || lower.Contains("bounce"))
             StartCoroutine(DoJump());
         else if (lower.Contains("spin") || lower.Contains("twirl") || lower.Contains("turn"))
@@ -758,7 +849,7 @@ public class EmoteAnimator : MonoBehaviour
         switch (lower)
         {
             case "joy":
-                pick = Random.Range(0, 7);
+                pick = Random.Range(0, 8);
                 switch (pick)
                 {
                     case 0: StartCoroutine(DoBounce()); break;
@@ -768,6 +859,7 @@ public class EmoteAnimator : MonoBehaviour
                     case 4: StartCoroutine(DoDance()); break;
                     case 5: StartCoroutine(DoBigWave()); break;
                     case 6: StartCoroutine(DoWave()); break;
+                    case 7: StartCoroutine(DoHappy()); break;
                 }
                 break;
             case "angry":
@@ -782,7 +874,7 @@ public class EmoteAnimator : MonoBehaviour
                 }
                 break;
             case "sorrow":
-                pick = Random.Range(0, 6);
+                pick = Random.Range(0, 7);
                 switch (pick)
                 {
                     case 0: StartCoroutine(DoDeflate()); break;
@@ -791,10 +883,11 @@ public class EmoteAnimator : MonoBehaviour
                     case 3: StartCoroutine(DoShrug()); break;
                     case 4: StartCoroutine(DoBendOver()); break;
                     case 5: StartCoroutine(DoPeek()); break;
+                    case 6: StartCoroutine(DoThinking()); break;
                 }
                 break;
             case "fun":
-                pick = Random.Range(0, 7);
+                pick = Random.Range(0, 9);
                 switch (pick)
                 {
                     case 0: StartCoroutine(DoWiggle()); break;
@@ -804,10 +897,12 @@ public class EmoteAnimator : MonoBehaviour
                     case 4: StartCoroutine(DoDance()); break;
                     case 5: StartCoroutine(DoBigWave()); break;
                     case 6: StartCoroutine(DoBounce()); break;
+                    case 7: StartCoroutine(DoSurprise()); break;
+                    case 8: StartCoroutine(DoHappy()); break;
                 }
                 break;
             default: // neutral
-                pick = Random.Range(0, 7);
+                pick = Random.Range(0, 8);
                 switch (pick)
                 {
                     case 0: StartCoroutine(DoNod()); break;
@@ -817,6 +912,7 @@ public class EmoteAnimator : MonoBehaviour
                     case 4: StartCoroutine(DoShrug()); break;
                     case 5: StartCoroutine(DoBendOver()); break;
                     case 6: StartCoroutine(DoWave()); break;
+                    case 7: StartCoroutine(DoThinking()); break;
                 }
                 break;
         }
@@ -949,8 +1045,11 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion headTilt = headRest * Quaternion.Euler(0f, 0f, -10f);
             Quaternion spineLean = spineRest * Quaternion.Euler(0f, 0f, -6f);
 
+            // Anticipation: small inward settle before the big raise (gives the wave more pop)
+            Quaternion armWindup = armRest * Quaternion.Euler(7f, 0f, 10f);
+            yield return RotateBoneOverTime(rightArm, armRest, armWindup, 0.07f);
             // Raise everything
-            yield return RotateBoneOverTime(rightArm, armRest, armRaised, 0.2f);
+            yield return RotateBoneOverTime(rightArm, armWindup, armRaised, 0.18f);
             if (rightLower != null) rightLower.localRotation = lowerBent;
             if (head != null) head.localRotation = headTilt;
             if (spine != null) spine.localRotation = spineLean;
@@ -2092,6 +2191,218 @@ public class EmoteAnimator : MonoBehaviour
                 yield return MoveOverTime(Vector3.up, -0.12f, 0.1f);
             }
         }
+
+        ResetState();
+    }
+
+    /// <summary> Finger-to-chin thinking pose — arm lifts to chin height, head micro-tilts while pondering </summary>
+    IEnumerator DoThinking()
+    {
+        isPlaying = true;
+        if (idleAnimator != null) idleAnimator.paused = true;
+        Transform rightArm   = poseManager?.GetBone(HumanBodyBones.RightUpperArm);
+        Transform rightLower = poseManager?.GetBone(HumanBodyBones.RightLowerArm);
+        Transform rightHand  = poseManager?.GetBone(HumanBodyBones.RightHand);
+        Transform head  = poseManager?.GetBone(HumanBodyBones.Head);
+        Transform spine = poseManager?.GetBone(HumanBodyBones.Spine);
+
+        Quaternion armRest   = rightArm   != null ? rightArm.localRotation   : Quaternion.identity;
+        Quaternion lowerRest = rightLower != null ? rightLower.localRotation : Quaternion.identity;
+        Quaternion handRest  = rightHand  != null ? rightHand.localRotation  : Quaternion.identity;
+        Quaternion headRest  = head  != null ? head.localRotation  : Quaternion.identity;
+        Quaternion spineRest = spine != null ? spine.localRotation : Quaternion.identity;
+
+        if (rightArm != null)
+        {
+            // Arm rises to chin height, elbow bent inward, slight wrist rotation
+            Quaternion armChin   = armRest   * Quaternion.Euler(-65f,  20f, -35f);
+            Quaternion lowerBent = lowerRest * Quaternion.Euler(-85f,   0f,   0f);
+            Quaternion handAngle = handRest  * Quaternion.Euler(  0f,   0f,  20f);
+            // Head tilts and looks slightly up while pondering; spine leans back minimally
+            Quaternion headPonder = headRest  * Quaternion.Euler( 5f, 12f, -8f);
+            Quaternion spineBack  = spineRest * Quaternion.Euler(-4f,  0f,  4f);
+
+            if (spine != null) spine.localRotation = spineBack;
+            yield return RotateBoneOverTime(rightArm, armRest, armChin, 0.3f);
+            if (rightLower != null) rightLower.localRotation = lowerBent;
+            if (rightHand  != null) rightHand.localRotation  = handAngle;
+            if (head != null) yield return RotateBoneOverTime(head, headRest, headPonder, 0.2f);
+
+            // Hold — alternating micro-tilts make the thinking look alive
+            Quaternion headAlt = headRest * Quaternion.Euler(3f, -10f, 6f);
+            yield return new WaitForSeconds(0.35f);
+            yield return RotateBoneOverTime(head, headPonder, headAlt, 0.35f);
+            yield return new WaitForSeconds(0.3f);
+            yield return RotateBoneOverTime(head, headAlt, headPonder, 0.3f);
+            yield return new WaitForSeconds(0.2f);
+
+            // Lower everything back
+            if (head != null) yield return RotateBoneOverTime(head, head.localRotation, headRest, 0.2f);
+            if (rightLower != null) rightLower.localRotation = lowerRest;
+            if (rightHand  != null) rightHand.localRotation  = handRest;
+            if (spine != null) spine.localRotation = spineRest;
+            yield return RotateBoneOverTime(rightArm, armChin, armRest, 0.3f);
+        }
+        else
+        {
+            yield return RotateOverTime(Vector3.right, -10f, 0.3f);
+            yield return new WaitForSeconds(0.9f);
+            yield return RotateOverTime(Vector3.right, 10f, 0.3f);
+        }
+
+        ResetState();
+    }
+
+    /// <summary> Startled surprise — both arms snap up instantly, body steps back, then smooth recovery </summary>
+    IEnumerator DoSurprise()
+    {
+        isPlaying = true;
+        if (idleAnimator != null) idleAnimator.paused = true;
+        Transform leftArm    = poseManager?.GetBone(HumanBodyBones.LeftUpperArm);
+        Transform rightArm   = poseManager?.GetBone(HumanBodyBones.RightUpperArm);
+        Transform leftLower  = poseManager?.GetBone(HumanBodyBones.LeftLowerArm);
+        Transform rightLower = poseManager?.GetBone(HumanBodyBones.RightLowerArm);
+        Transform head  = poseManager?.GetBone(HumanBodyBones.Head);
+        Transform spine = poseManager?.GetBone(HumanBodyBones.Spine);
+
+        Quaternion lRest  = leftArm   != null ? leftArm.localRotation   : Quaternion.identity;
+        Quaternion rRest  = rightArm  != null ? rightArm.localRotation  : Quaternion.identity;
+        Quaternion llRest = leftLower  != null ? leftLower.localRotation  : Quaternion.identity;
+        Quaternion rlRest = rightLower != null ? rightLower.localRotation : Quaternion.identity;
+        Quaternion hRest  = head  != null ? head.localRotation  : Quaternion.identity;
+        Quaternion sRest  = spine != null ? spine.localRotation : Quaternion.identity;
+
+        // Arms fly upward, elbows bent outward — startled "hands up" pose
+        Quaternion lUp   = lRest  * Quaternion.Euler(-85f,  0f,  25f);
+        Quaternion rUp   = rRest  * Quaternion.Euler(-85f,  0f, -25f);
+        Quaternion llOut = llRest * Quaternion.Euler(-50f,  0f,   0f);
+        Quaternion rlOut = rlRest * Quaternion.Euler(-50f,  0f,   0f);
+        Quaternion hBack = hRest  * Quaternion.Euler(-22f,  0f,   0f);
+        Quaternion sBack = sRest  * Quaternion.Euler( -6f,  0f,   0f);
+
+        // Snap! Everything moves at once (surprise is instant)
+        if (leftArm    != null) leftArm.localRotation    = lUp;
+        if (rightArm   != null) rightArm.localRotation   = rUp;
+        if (leftLower  != null) leftLower.localRotation  = llOut;
+        if (rightLower != null) rightLower.localRotation = rlOut;
+        if (head  != null) head.localRotation  = hBack;
+        if (spine != null) spine.localRotation = sBack;
+
+        // Quick step backward on same frame as jolt
+        yield return MoveOverTime(Vector3.back, 0.06f, 0.07f);
+
+        // Hold surprised pose
+        yield return new WaitForSeconds(0.45f);
+
+        // Smooth simultaneous recovery — blend all bones back together
+        float recoverTime = 0.45f;
+        float recElapsed  = 0f;
+        Vector3 backPos = transform.localPosition;
+        while (recElapsed < recoverTime)
+        {
+            recElapsed += Time.deltaTime;
+            float t = SmootherStep(recElapsed / recoverTime);
+            if (leftArm    != null) leftArm.localRotation    = Quaternion.Slerp(lUp,   lRest,  t);
+            if (rightArm   != null) rightArm.localRotation   = Quaternion.Slerp(rUp,   rRest,  t);
+            if (leftLower  != null) leftLower.localRotation  = Quaternion.Slerp(llOut, llRest, t);
+            if (rightLower != null) rightLower.localRotation = Quaternion.Slerp(rlOut, rlRest, t);
+            if (head  != null) head.localRotation  = Quaternion.Slerp(hBack, hRest, t);
+            if (spine != null) spine.localRotation = Quaternion.Slerp(sBack, sRest, t);
+            transform.localPosition = Vector3.Lerp(backPos, originalPos, t);
+            yield return null;
+        }
+
+        // Snap to exact rest
+        if (leftArm    != null) leftArm.localRotation    = lRest;
+        if (rightArm   != null) rightArm.localRotation   = rRest;
+        if (leftLower  != null) leftLower.localRotation  = llRest;
+        if (rightLower != null) rightLower.localRotation = rlRest;
+        if (head  != null) head.localRotation  = hRest;
+        if (spine != null) spine.localRotation = sRest;
+        transform.localPosition = originalPos;
+
+        ResetState();
+    }
+
+    /// <summary> Happy hop — anticipation crouch, single bright hop with arms wide, landing squish </summary>
+    IEnumerator DoHappy()
+    {
+        isPlaying = true;
+        if (idleAnimator != null) idleAnimator.paused = true;
+        Transform leftArm    = poseManager?.GetBone(HumanBodyBones.LeftUpperArm);
+        Transform rightArm   = poseManager?.GetBone(HumanBodyBones.RightUpperArm);
+        Transform leftLower  = poseManager?.GetBone(HumanBodyBones.LeftLowerArm);
+        Transform rightLower = poseManager?.GetBone(HumanBodyBones.RightLowerArm);
+        Transform head  = poseManager?.GetBone(HumanBodyBones.Head);
+        Transform spine = poseManager?.GetBone(HumanBodyBones.Spine);
+
+        Quaternion lRest  = leftArm   != null ? leftArm.localRotation   : Quaternion.identity;
+        Quaternion rRest  = rightArm  != null ? rightArm.localRotation  : Quaternion.identity;
+        Quaternion llRest = leftLower  != null ? leftLower.localRotation  : Quaternion.identity;
+        Quaternion rlRest = rightLower != null ? rightLower.localRotation : Quaternion.identity;
+        Quaternion hRest  = head  != null ? head.localRotation  : Quaternion.identity;
+        Quaternion sRest  = spine != null ? spine.localRotation : Quaternion.identity;
+
+        // Peak-of-hop pose: arms wide and up, spine arched back, head tilts back
+        Quaternion lUp    = lRest  * Quaternion.Euler(-95f,  0f,  22f);
+        Quaternion rUp    = rRest  * Quaternion.Euler(-95f,  0f, -22f);
+        Quaternion llBent = llRest * Quaternion.Euler(-30f,  0f,   0f);
+        Quaternion rlBent = rlRest * Quaternion.Euler(-30f,  0f,   0f);
+        Quaternion hBack  = hRest  * Quaternion.Euler(-12f,  0f,   0f);
+        Quaternion sArch  = sRest  * Quaternion.Euler( -6f,  0f,   0f);
+
+        // Anticipation: small crouch before hop
+        yield return MoveOverTime(Vector3.up, -0.03f, 0.06f);
+
+        // Hop up — blend bones to peak pose simultaneously
+        float hopUp = 0.12f;
+        float hopElapsed = 0f;
+        Vector3 hopStart = transform.localPosition;
+        Vector3 hopPeak  = hopStart + Vector3.up * 0.2f;
+        while (hopElapsed < hopUp)
+        {
+            hopElapsed += Time.deltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, hopElapsed / hopUp);
+            transform.localPosition = Vector3.Lerp(hopStart, hopPeak, t);
+            if (leftArm    != null) leftArm.localRotation    = Quaternion.Slerp(lRest,  lUp,    t);
+            if (rightArm   != null) rightArm.localRotation   = Quaternion.Slerp(rRest,  rUp,    t);
+            if (leftLower  != null) leftLower.localRotation  = Quaternion.Slerp(llRest, llBent, t);
+            if (rightLower != null) rightLower.localRotation = Quaternion.Slerp(rlRest, rlBent, t);
+            if (head  != null) head.localRotation  = Quaternion.Slerp(hRest, hBack, t);
+            if (spine != null) spine.localRotation = Quaternion.Slerp(sRest, sArch, t);
+            yield return null;
+        }
+
+        // Land — blend bones back to rest simultaneously
+        float hopDown = 0.10f;
+        float landElapsed = 0f;
+        Vector3 landStart = transform.localPosition;
+        Vector3 landEnd   = hopStart;
+        while (landElapsed < hopDown)
+        {
+            landElapsed += Time.deltaTime;
+            float t = Mathf.SmoothStep(0f, 1f, landElapsed / hopDown);
+            transform.localPosition = Vector3.Lerp(landStart, landEnd, t);
+            if (leftArm    != null) leftArm.localRotation    = Quaternion.Slerp(lUp,    lRest,  t);
+            if (rightArm   != null) rightArm.localRotation   = Quaternion.Slerp(rUp,    rRest,  t);
+            if (leftLower  != null) leftLower.localRotation  = Quaternion.Slerp(llBent, llRest, t);
+            if (rightLower != null) rightLower.localRotation = Quaternion.Slerp(rlBent, rlRest, t);
+            if (head  != null) head.localRotation  = Quaternion.Slerp(hBack, hRest, t);
+            if (spine != null) spine.localRotation = Quaternion.Slerp(sArch, sRest, t);
+            yield return null;
+        }
+
+        // Landing squish
+        yield return MoveOverTime(Vector3.up, -0.025f, 0.05f);
+        yield return MoveOverTime(Vector3.up,  0.025f, 0.08f);
+
+        // Settle
+        if (leftArm    != null) leftArm.localRotation    = lRest;
+        if (rightArm   != null) rightArm.localRotation   = rRest;
+        if (leftLower  != null) leftLower.localRotation  = llRest;
+        if (rightLower != null) rightLower.localRotation = rlRest;
+        if (head  != null) head.localRotation  = hRest;
+        if (spine != null) spine.localRotation = sRest;
 
         ResetState();
     }
