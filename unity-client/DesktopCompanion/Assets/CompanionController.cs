@@ -514,8 +514,11 @@ public class CompanionController : MonoBehaviour
             if (emoteAnimator != null)
                 emoteAnimator.StartTalkingGestures();
 
-            // Poll for incoming data while the request is in progress
-            while (!req.isDone)
+            // Poll for incoming data while the request is in progress.
+            // IMPORTANT: check isDone AFTER reading data, not before.
+            // A short first response can arrive in the same frame isDone becomes true;
+            // the old `while (!req.isDone)` would exit before ever reading that data.
+            while (true)
             {
                 string currentData = req.downloadHandler?.text ?? "";
                 if (currentData.Length > lastProcessed)
@@ -534,8 +537,12 @@ public class CompanionController : MonoBehaviour
                             string jsonStr = trimmed.Substring(6);
                             try
                             {
+                                // Use a specific key:value check to avoid false-positives
+                                // when a token happens to contain the word "done" quoted.
+                                bool isDoneEvent = jsonStr.Contains("\"done\":true")
+                                                || jsonStr.Contains("\"done\": true");
                                 // Check if this is a token or the final message
-                                if (jsonStr.Contains("\"done\""))
+                                if (isDoneEvent)
                                 {
                                     // Final message with emotes + emotion — parse it
                                     StreamDone done = JsonUtility.FromJson<StreamDone>(jsonStr);
@@ -553,10 +560,15 @@ public class CompanionController : MonoBehaviour
                                     {
                                         TriggerEmotion(done.emotion);
                                     }
-                                    // Set clean reply (without emote markers)
+                                    // Set clean reply — strip any emotes the server may have
+                                    // missed (belt-and-suspenders safety net)
                                     if (!string.IsNullOrEmpty(done.reply))
                                     {
-                                        speechBubbleText.text = done.reply;
+                                        string safeReply = System.Text.RegularExpressions.Regex
+                                            .Replace(done.reply, @"\*[^*]+\*", "");
+                                        safeReply = System.Text.RegularExpressions.Regex
+                                            .Replace(safeReply, @"\s{2,}", " ").Trim();
+                                        speechBubbleText.text = safeReply;
                                     }
                                     // Stop talking mouth
                                     if (faceAnim != null)
@@ -614,6 +626,9 @@ public class CompanionController : MonoBehaviour
                         }
                     }
                 }
+                // Check isDone AFTER processing data — ensures we never skip
+                // a final chunk that arrived in the same frame as the done signal.
+                if (req.isDone) break;
                 yield return null; // Wait one frame
             }
 
