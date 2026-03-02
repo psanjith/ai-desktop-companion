@@ -1188,34 +1188,34 @@ public class EmoteAnimator : MonoBehaviour
 
         if (rightArm != null)
         {
-            Quaternion armRest  = rightArm.localRotation;
+            Quaternion armRest   = rightArm.localRotation;
             Quaternion lowerRest = rightLower != null ? rightLower.localRotation : Quaternion.identity;
             Quaternion handRest  = rightHand  != null ? rightHand.localRotation  : Quaternion.identity;
-            Quaternion headRest  = head        != null ? head.localRotation        : Quaternion.identity;
-            Quaternion spineRest = spine       != null ? spine.localRotation       : Quaternion.identity;
+            Quaternion headRest  = head  != null ? head.localRotation  : Quaternion.identity;
+            Quaternion spineRest = spine != null ? spine.localRotation : Quaternion.identity;
 
-            // Arm at shoulder height to the side — not past vertical (-80 X is natural)
-            Quaternion armRaised  = armRest  * Quaternion.Euler(-80f,  0f, -35f);
-            // Elbow bent so the forearm points upward (~90°)
-            Quaternion lowerBent  = lowerRest * Quaternion.Euler(-65f,  0f,  0f);
-            Quaternion headTilt   = headRest  * Quaternion.Euler(  0f,  0f, -8f);
-            Quaternion spineLean  = spineRest * Quaternion.Euler(  0f,  0f, -4f);
+            // +Z raises the right arm (confirmed by DoShrug/DoBounce which use +15f/+20f Z).
+            // Raise to ~75° from T-pose so arm is above shoulder, slightly forward with -10° X.
+            // Do NOT rotate the lower arm — at this height any X/Z bend snaps the forearm
+            // downward due to the rotated local axes. Keeping lowerRest lets the arm stay natural.
+            Quaternion armRaised  = armRest  * Quaternion.Euler(-10f, 0f, 75f);
+            Quaternion headTilt   = headRest  * Quaternion.Euler(0f, 0f, -8f);
+            Quaternion spineLean  = spineRest * Quaternion.Euler(0f, 0f, -4f);
 
-            // Wrist poses — the wave motion comes from the HAND only, not the whole arm
-            Quaternion handWaveA  = handRest  * Quaternion.Euler(0f,  0f,  28f);
-            Quaternion handWaveB  = handRest  * Quaternion.Euler(0f,  0f, -28f);
+            // Wrist wave oscillates on Z (side-to-side from the hand's perspective)
+            Quaternion handWaveA = handRest * Quaternion.Euler(0f, 0f,  25f);
+            Quaternion handWaveB = handRest * Quaternion.Euler(0f, 0f, -25f);
 
-            // Anticipation: small settle before the raise
-            Quaternion armWindup = armRest * Quaternion.Euler(5f, 0f, 8f);
+            // Small windup before the raise (gives the motion a bit of pop)
+            Quaternion armWindup = armRest * Quaternion.Euler(4f, 0f, -5f);
             yield return RotateBoneOverTime(rightArm, armRest, armWindup, 0.07f);
 
-            // Raise arm + set elbow/head/spine simultaneously
-            yield return RotateBoneOverTime(rightArm, armWindup, armRaised, 0.18f);
-            if (rightLower != null) rightLower.localRotation = lowerBent;
+            // Raise arm — simultaneously tilt head and lean spine
+            yield return RotateBoneOverTime(rightArm, armWindup, armRaised, 0.2f);
             if (head  != null) head.localRotation  = headTilt;
             if (spine != null) spine.localRotation = spineLean;
 
-            // Wave: only the wrist/hand rotates — 3 cycles is natural
+            // Wave: hand only oscillates, upper arm is still
             for (int i = 0; i < 3; i++)
             {
                 if (rightHand != null)
@@ -1223,16 +1223,14 @@ public class EmoteAnimator : MonoBehaviour
                 if (rightHand != null)
                     yield return RotateBoneOverTime(rightHand, handWaveA, handWaveB, 0.18f);
                 if (rightHand != null)
-                    yield return RotateBoneOverTime(rightHand, handWaveB, handRest,   0.11f);
+                    yield return RotateBoneOverTime(rightHand, handWaveB, handRest, 0.11f);
             }
 
             // Lower everything back smoothly
             if (rightHand  != null) rightHand.localRotation  = handRest;
-            if (rightLower != null)
-                yield return RotateBoneOverTime(rightLower, lowerBent, lowerRest, 0.15f);
             if (head  != null) yield return RotateBoneOverTime(head,  headTilt,  headRest,  0.15f);
             if (spine != null) spine.localRotation = spineRest;
-            yield return RotateBoneOverTime(rightArm, armRaised, armRest, 0.25f);
+            yield return RotateBoneOverTime(rightArm, armRaised, armRest, 0.28f);
         }
         else
         {
