@@ -23,6 +23,11 @@ public class CompanionController : MonoBehaviour
     private bool textChatVisible = false;
     private bool hasPendingResponse = false; // true when speech bubble has content to show
 
+    // Speech bubble auto-dismiss
+    private Coroutine _bubbleDismissTimer;
+    private const float BubbleHoldTime  = 8f;  // seconds before fade starts
+    private const float BubbleFadeTime  = 1.2f; // seconds the fade-out takes
+
     // --- Design tokens ---
     static readonly Color BgPanel     = new Color(0.07f, 0.07f, 0.11f, 0.88f); // near-black
     static readonly Color BgInput     = new Color(0.12f, 0.12f, 0.18f, 0.95f); // slightly lighter
@@ -67,6 +72,67 @@ public class CompanionController : MonoBehaviour
     }
 
     // ── Speech bubble ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Show the speech bubble with the given text and restart the auto-dismiss timer.
+    /// All code that wants to display something in the bubble should call this.
+    /// </summary>
+    private void ShowBubble(string text)
+    {
+        if (speechBubbleText != null) speechBubbleText.text = text;
+        if (speechBubble == null) return;
+
+        // Make sure it's fully opaque before showing
+        var img = speechBubble.GetComponent<Image>();
+        if (img != null) img.color = new Color(img.color.r, img.color.g, img.color.b, 1f);
+        if (speechBubbleText != null)
+            speechBubbleText.color = new Color(TextPrimary.r, TextPrimary.g, TextPrimary.b, 1f);
+
+        speechBubble.SetActive(true);
+
+        // Restart dismiss timer
+        if (_bubbleDismissTimer != null) StopCoroutine(_bubbleDismissTimer);
+        _bubbleDismissTimer = StartCoroutine(DismissBubbleAfterDelay());
+    }
+
+    /// <summary>
+    /// Hide the bubble immediately and cancel any pending dismiss timer.
+    /// </summary>
+    private void HideBubble()
+    {
+        if (_bubbleDismissTimer != null) { StopCoroutine(_bubbleDismissTimer); _bubbleDismissTimer = null; }
+        if (speechBubble != null) speechBubble.SetActive(false);
+    }
+
+    /// <summary>
+    /// Wait BubbleHoldTime seconds, then smoothly fade the bubble out.
+    /// </summary>
+    private IEnumerator DismissBubbleAfterDelay()
+    {
+        yield return new WaitForSeconds(BubbleHoldTime);
+
+        if (speechBubble == null) yield break;
+
+        var img  = speechBubble.GetComponent<Image>();
+        float elapsed = 0f;
+        while (elapsed < BubbleFadeTime)
+        {
+            elapsed += Time.deltaTime;
+            float alpha = Mathf.Lerp(1f, 0f, elapsed / BubbleFadeTime);
+            if (img != null) img.color = new Color(img.color.r, img.color.g, img.color.b, alpha);
+            if (speechBubbleText != null)
+                speechBubbleText.color = new Color(TextPrimary.r, TextPrimary.g, TextPrimary.b, alpha);
+            yield return null;
+        }
+
+        speechBubble.SetActive(false);
+        // Restore full opacity so it looks right next time it appears
+        if (img != null) img.color = new Color(img.color.r, img.color.g, img.color.b, 1f);
+        if (speechBubbleText != null)
+            speechBubbleText.color = new Color(TextPrimary.r, TextPrimary.g, TextPrimary.b, 1f);
+        _bubbleDismissTimer = null;
+    }
+
     private void StyleSpeechBubble()
     {
         if (speechBubble == null) return;
@@ -408,10 +474,10 @@ public class CompanionController : MonoBehaviour
     /// </summary>
     public void SetStatusText(string text)
     {
-        if (speechBubbleText != null)
-            speechBubbleText.text = text;
-        if (speechBubble != null)
-            speechBubble.SetActive(!string.IsNullOrEmpty(text));
+        if (string.IsNullOrEmpty(text))
+            HideBubble();
+        else
+            ShowBubble(text);
     }
 
     /// <summary>
@@ -482,7 +548,10 @@ public class CompanionController : MonoBehaviour
             speechBubbleText.text = "";
         hasPendingResponse = true;
         if (speechBubble != null)
+        {
+            if (_bubbleDismissTimer != null) { StopCoroutine(_bubbleDismissTimer); _bubbleDismissTimer = null; }
             speechBubble.SetActive(true);
+        }
 
         // Send current character so backend uses the right personality
         string charName = CharacterManager.Instance != null
@@ -568,7 +637,7 @@ public class CompanionController : MonoBehaviour
                                             .Replace(done.reply, @"\*[^*]+\*", "");
                                         safeReply = System.Text.RegularExpressions.Regex
                                             .Replace(safeReply, @"\s{2,}", " ").Trim();
-                                        speechBubbleText.text = safeReply;
+                                        ShowBubble(safeReply);
                                     }
                                     // Stop talking mouth
                                     if (faceAnim != null)
@@ -618,7 +687,7 @@ public class CompanionController : MonoBehaviour
                                         display = System.Text.RegularExpressions.Regex.Replace(
                                             display, @"\s{2,}", " ").Trim();
                                         if (speechBubbleText != null)
-                                            speechBubbleText.text = display;
+                                            ShowBubble(display);
                                     }
                                 }
                             }
