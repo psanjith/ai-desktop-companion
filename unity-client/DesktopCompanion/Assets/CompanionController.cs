@@ -28,6 +28,10 @@ public class CompanionController : MonoBehaviour
     private const float BubbleHoldTime  = 8f;  // seconds before fade starts
     private const float BubbleFadeTime  = 1.2f; // seconds the fade-out takes
 
+    // Guards ResumeGesturesAfterEmote — true while a streaming request is in flight.
+    // Set to false on the done event so we never restart the gesture loop after streaming ends.
+    private bool _isStreaming = false;
+
     // --- Design tokens ---
     static readonly Color BgPanel     = new Color(0.07f, 0.07f, 0.11f, 0.88f); // near-black
     static readonly Color BgInput     = new Color(0.12f, 0.12f, 0.18f, 0.95f); // slightly lighter
@@ -493,8 +497,7 @@ public class CompanionController : MonoBehaviour
             if (speechBubbleText != null)
                 speechBubbleText.text = "";
             hasPendingResponse = false;
-            if (speechBubble != null)
-                speechBubble.SetActive(false);
+            HideBubble(); // cancels _bubbleDismissTimer + hides bubble
 
             UpdateCharacterNameUI();
         }
@@ -544,11 +547,17 @@ public class CompanionController : MonoBehaviour
 
     IEnumerator SendToAI(string message)
     {
-        if (speechBubbleText != null)
-            speechBubbleText.text = "";
+        // Show "..." immediately — give visual feedback while waiting for the first token.
+        // Cancel any running dismiss timer but do NOT start a new one; the bubble must stay
+        // until the response arrives (which can take several seconds on local Ollama).
+        if (speechBubbleText != null) speechBubbleText.text = "...";
         hasPendingResponse = true;
         if (speechBubble != null)
         {
+            var loadImg = speechBubble.GetComponent<Image>();
+            if (loadImg != null) loadImg.color = new Color(loadImg.color.r, loadImg.color.g, loadImg.color.b, 1f);
+            if (speechBubbleText != null)
+                speechBubbleText.color = new Color(TextPrimary.r, TextPrimary.g, TextPrimary.b, 1f);
             if (_bubbleDismissTimer != null) { StopCoroutine(_bubbleDismissTimer); _bubbleDismissTimer = null; }
             speechBubble.SetActive(true);
         }
@@ -571,6 +580,7 @@ public class CompanionController : MonoBehaviour
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Content-Type", "application/json");
 
+            _isStreaming = true;
             req.SendWebRequest();
 
             string fullRawText = "";
@@ -704,8 +714,8 @@ public class CompanionController : MonoBehaviour
             // Handle any errors
             if (req.result != UnityWebRequest.Result.Success)
             {
-                if (speechBubbleText != null)
-                    speechBubbleText.text = "Connection error.";
+                _isStreaming = false;
+                ShowBubble("Connection error."); // auto-dismisses after BubbleHoldTime
                 Debug.LogError(req.error);
                 if (faceAnim != null)
                     faceAnim.StopTalking();
@@ -727,9 +737,11 @@ public class CompanionController : MonoBehaviour
             elapsed += Time.deltaTime;
             yield return null;
         }
-        // Only resume if we haven't received the done message yet (i.e., still streaming)
-        // The gesture loop being null means StopTalkingGestures was called (done message arrived)
-        emoteAnimator.StartTalkingGestures();
+        // Only resume gestures if the stream is still active.
+        // If the done event fired while this emote was playing, _isStreaming is already false
+        // and StopTalkingGestures was already called — calling Start again would loop forever.
+        if (_isStreaming)
+            emoteAnimator.StartTalkingGestures();
     }
 
     private void TriggerEmotes(string[] emotes)

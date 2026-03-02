@@ -118,6 +118,7 @@ public class VoiceInputManager : MonoBehaviour
             if (req.result != UnityWebRequest.Result.Success)
             {
                 Debug.LogError($"[Voice] Transcribe error: {req.error}");
+                if (controller != null) controller.SetStatusText(""); // clear 'Processing...'
                 yield break;
             }
 
@@ -148,6 +149,7 @@ public class VoiceInputManager : MonoBehaviour
             else
             {
                 Debug.LogWarning("[Voice] Transcript was empty — nothing sent.");
+                if (controller != null) controller.SetStatusText(""); // clear 'Processing...'
             }
         }
     }

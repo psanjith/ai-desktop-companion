@@ -151,20 +151,6 @@ def chat(user_input, character="female_default"):
     cur.execute("INSERT INTO memory (character, user, ai) VALUES (?, ?, ?)", (character, user_input, raw_reply))
     conn.commit()
 
-    # --- Personality adaptation rules ---
-    lower = user_input.lower()
-
-    if any(word in lower for word in ["lol", "haha", "lmao"]):
-        personality["humor"] = "playful"
-    if any(word in lower for word in ["why", "explain", "how"]):
-        personality["verbosity"] = "high"
-    if any(word in lower for word in ["ok", "fine", "whatever"]):
-        personality["energy"] = "low"
-
-    all_personalities[character] = personality
-    with open(PERSONALITIES_PATH, "w") as f:
-        json.dump(all_personalities, f, indent=2)
-
     conn.close()
     return clean_reply, emotes
 
@@ -244,53 +230,42 @@ def chat_stream_api():
         messages.append({"role": "user", "content": user_input})
 
         def generate():
-            full_reply = ""
-            stream = ollama_client.chat(
-                model="llama3.2:3b",
-                messages=messages,
-                stream=True,
-                options={
-                    "num_predict": 80,
-                    "temperature": 0.8,
-                    "num_ctx": 1024,
-                }
-            )
-            for chunk in stream:
-                token = chunk["message"]["content"]
-                full_reply += token
-                # Send each token as an SSE data line
-                yield f"data: {json.dumps({'token': token})}\n\n"
+            try:
+                full_reply = ""
+                stream = ollama_client.chat(
+                    model="llama3.2:3b",
+                    messages=messages,
+                    stream=True,
+                    options={
+                        "num_predict": 80,
+                        "temperature": 0.8,
+                        "num_ctx": 1024,
+                    }
+                )
+                for chunk in stream:
+                    token = chunk["message"]["content"]
+                    full_reply += token
+                    # Send each token as an SSE data line
+                    yield f"data: {json.dumps({'token': token})}\n\n"
 
-            # Stream is done — extract emotes and send final message
-            raw_reply = full_reply.strip()
-            emotes = re.findall(r'\*([^*]+)\*', raw_reply)
-            clean_reply = re.sub(r'\*[^*]+\*', '', raw_reply).strip()
-            clean_reply = re.sub(r'\s{2,}', ' ', clean_reply).strip()
+                # Stream is done — extract emotes and send final message
+                raw_reply = full_reply.strip()
+                emotes = re.findall(r'\*([^*]+)\*', raw_reply)
+                clean_reply = re.sub(r'\*[^*]+\*', '', raw_reply).strip()
+                clean_reply = re.sub(r'\s{2,}', ' ', clean_reply).strip()
 
-            # Save to memory
-            cur.execute("INSERT INTO memory (character, user, ai) VALUES (?, ?, ?)",
-                        (character, user_input, raw_reply))
-            conn.commit()
+                # Save to memory
+                cur.execute("INSERT INTO memory (character, user, ai) VALUES (?, ?, ?)",
+                            (character, user_input, raw_reply))
+                conn.commit()
 
-            # Personality adaptation
-            lower = user_input.lower()
-            if any(word in lower for word in ["lol", "haha", "lmao"]):
-                personality["humor"] = "playful"
-            if any(word in lower for word in ["why", "explain", "how"]):
-                personality["verbosity"] = "high"
-            if any(word in lower for word in ["ok", "fine", "whatever"]):
-                personality["energy"] = "low"
-            all_personalities[character] = personality
-            with open(PERSONALITIES_PATH, "w") as f_out:
-                json.dump(all_personalities, f_out, indent=2)
+                # Detect emotion from the full reply
+                emotion = detect_emotion(clean_reply, emotes)
 
-            conn.close()
-
-            # Detect emotion from the full reply
-            emotion = detect_emotion(clean_reply, emotes)
-
-            # Send final event with emotes, emotion, and clean reply
-            yield f"data: {json.dumps({'done': True, 'reply': clean_reply, 'emotes': emotes, 'emotion': emotion})}\n\n"
+                # Send final event with emotes, emotion, and clean reply
+                yield f"data: {json.dumps({'done': True, 'reply': clean_reply, 'emotes': emotes, 'emotion': emotion})}\n\n"
+            finally:
+                conn.close()
 
         return Response(
             stream_with_context(generate()),

@@ -25,14 +25,21 @@ echo "   PID: $BACKEND_PID  |  Logs: $LOG_FILE"
 
 # ── 3. Wait until backend is ready ────────────────────────────────────────────
 echo -n "   Waiting for backend"
+HEALTHY=false
 for i in $(seq 1 15); do
     if curl -s --max-time 1 http://127.0.0.1:$PORT/character &>/dev/null; then
         echo " ✅"
+        HEALTHY=true
         break
     fi
     echo -n "."
     sleep 1
 done
+if [ "$HEALTHY" != "true" ]; then
+    echo ""
+    echo "❌ Backend did not start within 15s. Check logs: tail -f $LOG_FILE"
+    exit 1
+fi
 
 # ── 4. Launch the app ─────────────────────────────────────────────────────────
 if [ -d "$APP_PATH" ]; then
