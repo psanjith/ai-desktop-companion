@@ -310,7 +310,8 @@ def chat_stream_api():
 def transcribe_audio():
     """Receive a WAV audio file from Unity and return transcribed text via faster-whisper."""
     try:
-        import tempfile
+        import time
+        import io
 
         if _whisper_model is None:
             return jsonify({"error": "Whisper model not loaded"}), 500
@@ -320,17 +321,24 @@ def transcribe_audio():
 
         audio_file = request.files["audio"]
 
-        # Save to a temp file
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            tmp_path = tmp.name
-            audio_file.save(tmp_path)
+        # Read directly into a BytesIO buffer — no temp file write/read round-trip
+        audio_bytes = io.BytesIO(audio_file.read())
 
-        segments, _ = _whisper_model.transcribe(tmp_path, beam_size=1, language="en")
+        t0 = time.time()
+        segments, _ = _whisper_model.transcribe(
+            audio_bytes,
+            language="en",
+            beam_size=1,            # greedy decoding — fastest
+            best_of=1,              # no sampling candidates
+            condition_on_previous_text=False,  # skip inter-segment context (not needed for one-shot clips)
+            vad_filter=True,        # skip silent regions before decoding
+            vad_parameters=dict(min_silence_duration_ms=300),
+        )
+        # Materialise the lazy generator eagerly (avoids leaving model in use)
         transcript = " ".join(seg.text.strip() for seg in segments).strip()
+        t1 = time.time()
 
-        os.remove(tmp_path)
-
-        print(f"[Transcribe] '{transcript}'")
+        print(f"[Transcribe] '{transcript}' ({t1-t0:.2f}s)")
         return jsonify({"text": transcript})
 
     except Exception as e:
