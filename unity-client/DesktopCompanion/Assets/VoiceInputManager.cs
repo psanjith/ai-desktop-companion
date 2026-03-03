@@ -83,7 +83,7 @@ public class VoiceInputManager : MonoBehaviour
         }
 
         // Restore mic button colour and label
-        SetMicButtonColor(new Color(0.17f, 0.17f, 0.22f, 1f)); // BgButton
+        SetMicButtonColor(new Color(0.13f, 0.14f, 0.21f, 0.90f)); // BgButton
         if (controller != null) controller.SetMicActiveLabel(false);
 
         if (samplePos < 100)
