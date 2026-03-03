@@ -1,0 +1,6 @@
+{
+  "provider": "groq",
+  "model": "llama-3.2-3b-preview",
+  "api_key": "YOUR_GROQ_API_KEY_HERE",
+  "ollama_host": "http://localhost:11434"
+}

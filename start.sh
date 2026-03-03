@@ -30,31 +30,60 @@ find_python() {
 PYTHON=$(find_python) || { echo "❌ Python 3 not found. Install from python.org or via Homebrew."; exit 1; }
 echo "🐍 Using Python: $PYTHON"
 
-# ── 1. Check Ollama is running ────────────────────────────────────────────────
-if ! curl -s --max-time 2 http://localhost:11434/api/tags &>/dev/null; then
-    echo "⚠️  Ollama is not running. Attempting to start it..."
-    if command -v ollama &>/dev/null; then
-        ollama serve &>/tmp/ollama.log &
-        echo -n "   Waiting for Ollama"
-        for i in $(seq 1 10); do
-            if curl -s --max-time 1 http://localhost:11434/api/tags &>/dev/null; then
-                echo " ✅"
-                break
+# ── 1. Read config + validate provider ───────────────────────────────────────
+CONFIG_FILE="$BACKEND_DIR/config.json"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "❌ Missing backend/config.json."
+    echo "   See backend/config.example.json for reference."
+    exit 1
+fi
+
+PROVIDER=$("$PYTHON" -c "import json; c=json.load(open('$CONFIG_FILE')); print(c.get('provider','ollama'))" 2>/dev/null || echo "ollama")
+API_KEY=$("$PYTHON"  -c "import json; c=json.load(open('$CONFIG_FILE')); print(c.get('api_key',''))"   2>/dev/null || echo "")
+echo "🔧 Provider: $PROVIDER"
+
+if [ "$PROVIDER" = "ollama" ]; then
+    # ── Ollama health check ──────────────────────────────────────────────────
+    if ! curl -s --max-time 2 http://localhost:11434/api/tags &>/dev/null; then
+        echo "⚠️  Ollama is not running. Attempting to start it..."
+        if command -v ollama &>/dev/null; then
+            ollama serve &>/tmp/ollama.log &
+            echo -n "   Waiting for Ollama"
+            for i in $(seq 1 10); do
+                if curl -s --max-time 1 http://localhost:11434/api/tags &>/dev/null; then
+                    echo " ✅"
+                    break
+                fi
+                echo -n "."
+                sleep 1
+            done
+            if ! curl -s --max-time 1 http://localhost:11434/api/tags &>/dev/null; then
+                echo ""
+                echo "❌ Ollama did not start. Run 'ollama serve' manually, then try again."
+                exit 1
             fi
-            echo -n "."
-            sleep 1
-        done
-        if ! curl -s --max-time 1 http://localhost:11434/api/tags &>/dev/null; then
-            echo ""
-            echo "❌ Ollama did not start. Run 'ollama serve' manually, then try again."
+        else
+            echo "❌ Ollama not installed. Download from https://ollama.ai and run 'ollama pull llama3.2:3b'."
             exit 1
         fi
     else
-        echo "❌ Ollama not installed. Download from https://ollama.ai and run 'ollama pull llama3.2:3b'."
-        exit 1
+        echo "✅ Ollama is running."
     fi
 else
-    echo "✅ Ollama is running."
+    # ── API key check ────────────────────────────────────────────────────────
+    if [ -z "$API_KEY" ] || \
+       [ "$API_KEY" = "YOUR_GROQ_API_KEY_HERE" ] || \
+       [ "$API_KEY" = "YOUR_OPENAI_API_KEY_HERE" ]; then
+        echo "❌ No API key configured for provider '$PROVIDER'."
+        echo "   Open backend/config.json and set your api_key."
+        if [ "$PROVIDER" = "groq" ]; then
+            echo "   → Free key at: https://console.groq.com"
+        elif [ "$PROVIDER" = "openai" ]; then
+            echo "   → Key at: https://platform.openai.com/api-keys"
+        fi
+        exit 1
+    fi
+    echo "✅ API key found."
 fi
 
 # ── 2. Kill any stale backend ──────────────────────────────────────────────────

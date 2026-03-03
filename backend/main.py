@@ -3,7 +3,6 @@ import json
 import os
 import re
 from flask import Flask, request, jsonify, Response, stream_with_context
-from ollama import Client
 
 # Pre-load Whisper model once at startup — avoids ~2s reload on every /transcribe call
 try:
@@ -14,13 +13,73 @@ except Exception as _e:
     _whisper_model = None
     print(f"[Whisper] Failed to load model: {_e}")
 
-# Paths
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# ── Paths ──────────────────────────────────────────────────────────────────────
+BASE_DIR          = os.path.dirname(os.path.abspath(__file__))
 PERSONALITIES_PATH = os.path.join(BASE_DIR, "personalities.json")
-MEMORY_DB_PATH = os.path.join(BASE_DIR, "memory.db")
+MEMORY_DB_PATH    = os.path.join(BASE_DIR, "memory.db")
 
-# Ollama client (faster than subprocess)
-ollama_client = Client(host="http://localhost:11434")
+# ── Config ─────────────────────────────────────────────────────────────────────
+_CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+try:
+    with open(_CONFIG_PATH) as _f:
+        _config = json.load(_f)
+except FileNotFoundError:
+    _config = {"provider": "ollama", "model": "llama3.2:3b",
+               "ollama_host": "http://localhost:11434"}
+    print("[Config] config.json not found — defaulting to Ollama llama3.2:3b")
+
+_PROVIDER = _config.get("provider", "ollama").lower()
+_MODEL    = _config.get("model", "llama3.2:3b")
+print(f"[Config] Provider: {_PROVIDER}  Model: {_MODEL}")
+
+# ── LLM client ─────────────────────────────────────────────────────────────────
+_ollama_client = _groq_client = _openai_client = None
+
+if _PROVIDER == "ollama":
+    from ollama import Client as _OllamaClient
+    _ollama_client = _OllamaClient(host=_config.get("ollama_host", "http://localhost:11434"))
+elif _PROVIDER == "groq":
+    try:
+        from groq import Groq as _Groq
+        _groq_client = _Groq(api_key=_config["api_key"])
+    except ImportError:
+        raise ImportError("[Config] 'groq' package missing. Run: pip install groq")
+elif _PROVIDER == "openai":
+    try:
+        from openai import OpenAI as _OpenAI
+        _openai_client = _OpenAI(api_key=_config["api_key"])
+    except ImportError:
+        raise ImportError("[Config] 'openai' package missing. Run: pip install openai")
+else:
+    raise ValueError(f"[Config] Unknown provider '{_PROVIDER}'. Use: ollama, groq, or openai")
+
+
+def _llm_call(messages, stream=False):
+    """Route to the configured LLM provider."""
+    if _PROVIDER == "ollama":
+        return _ollama_client.chat(
+            model=_MODEL, messages=messages, stream=stream,
+            options={"num_predict": 80, "temperature": 0.8, "num_ctx": 1024}
+        )
+    client = _groq_client if _PROVIDER == "groq" else _openai_client
+    return client.chat.completions.create(
+        model=_MODEL, messages=messages, max_tokens=80, temperature=0.8, stream=stream
+    )
+
+
+def _token_from_chunk(chunk) -> str:
+    """Extract a text token from a streaming chunk."""
+    if _PROVIDER == "ollama":
+        return chunk["message"]["content"]
+    return chunk.choices[0].delta.content or ""
+
+
+def _reply_from_response(response) -> str:
+    """Extract text from a non-streaming response."""
+    if _PROVIDER == "ollama":
+        return response["message"]["content"].strip()
+    return response.choices[0].message.content.strip()
+
 
 # Flask app
 app = Flask(__name__)
@@ -129,17 +188,9 @@ def chat(user_input, character="female_default"):
     history = cur.fetchall()
     messages = build_messages(personality, history, user_input)
 
-    # Call local LLM via Ollama Python client
-    response = ollama_client.chat(
-        model="llama3.2:3b",
-        messages=messages,
-        options={
-            "num_predict": 80,     # Max ~80 tokens (2-4 sentences)
-            "temperature": 0.8,    # Slightly creative
-            "num_ctx": 1024,       # Smaller context window = faster
-        }
-    )
-    raw_reply = response["message"]["content"].strip()
+    # Call LLM via configured provider
+    response = _llm_call(messages)
+    raw_reply = _reply_from_response(response)
 
     # Extract emotes like *yawns*, *blinks slowly* from reply
     emotes = re.findall(r'\*([^*]+)\*', raw_reply)
@@ -201,18 +252,9 @@ def chat_stream_api():
         def generate():
             try:
                 full_reply = ""
-                stream = ollama_client.chat(
-                    model="llama3.2:3b",
-                    messages=messages,
-                    stream=True,
-                    options={
-                        "num_predict": 80,
-                        "temperature": 0.8,
-                        "num_ctx": 1024,
-                    }
-                )
+                stream = _llm_call(messages, stream=True)
                 for chunk in stream:
-                    token = chunk["message"]["content"]
+                    token = _token_from_chunk(chunk)
                     full_reply += token
                     # Send each token as an SSE data line
                     yield f"data: {json.dumps({'token': token})}\n\n"

@@ -1,0 +1,25 @@
+{
+  "_comment": "Copy this file to config.json and fill in your settings.",
+
+  "_option_groq": {
+    "provider": "groq",
+    "model": "llama-3.2-3b-preview",
+    "api_key": "gsk_...",
+    "note": "Free tier — get key at https://console.groq.com  (fastest option)"
+  },
+
+  "_option_openai": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "api_key": "sk-...",
+    "note": "Paid — get key at https://platform.openai.com/api-keys"
+  },
+
+  "_option_ollama": {
+    "provider": "ollama",
+    "model": "llama3.2:3b",
+    "api_key": "",
+    "ollama_host": "http://localhost:11434",
+    "note": "Offline / private — requires Ollama installed on your machine"
+  }
+}
