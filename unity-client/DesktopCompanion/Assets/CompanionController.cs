@@ -447,10 +447,7 @@ public class CompanionController : MonoBehaviour
                 cols.pressedColor     = new Color(0.27f, 0.28f, 0.38f, 1f);
                 cols.fadeDuration     = 0.12f;
                 swBtn.colors = cols;
-                // RemoveAllListeners first so Inspector-assigned + code listeners don't stack
-                // into a double-call that immediately toggles back.
-                swBtn.onClick.RemoveAllListeners();
-                swBtn.onClick.AddListener(OnSwitchCharacter);
+                // onClick is wired in the Inspector — don't add a second listener here
             }
 
             var swLabel = switchButton.GetComponentInChildren<TMP_Text>();
