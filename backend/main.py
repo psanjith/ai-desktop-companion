@@ -75,27 +75,10 @@ def get_db():
     return conn
 
 
-def chat(user_input, character="female_default"):
-    conn = get_db()
-    cur = conn.cursor()
-
-    # Load all personalities fresh each time
-    with open(PERSONALITIES_PATH, "r") as f:
-        all_personalities = json.load(f)
-
-    # Get personality for current character (fallback to first)
-    personality = all_personalities.get(character)
-    if not personality:
-        personality = list(all_personalities.values())[0]
-
+def build_messages(personality, history, user_input):
+    """Build the Ollama messages list — shared by /chat and /chat/stream."""
     char_name = personality.get("name", "Companion")
     quirks = personality.get("quirks", "")
-
-    # Load last 2 interactions for THIS character only
-    cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 2", (character,))
-    history = cur.fetchall()
-
-    # Build messages for Ollama chat API
     messages = [
         {
             "role": "system",
@@ -119,14 +102,32 @@ def chat(user_input, character="female_default"):
             ),
         }
     ]
-    # Add a few-shot example so the LLM locks onto the correct name
     messages.append({"role": "user", "content": "What should I call you?"})
     messages.append({"role": "assistant", "content": f"*waves* I'm {char_name}! Nice to meet you~"})
-
     for u, a in reversed(history):
         messages.append({"role": "user", "content": u})
         messages.append({"role": "assistant", "content": a})
     messages.append({"role": "user", "content": user_input})
+    return messages
+
+
+def chat(user_input, character="female_default"):
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Load all personalities fresh each time
+    with open(PERSONALITIES_PATH, "r") as f:
+        all_personalities = json.load(f)
+
+    # Get personality for current character (fallback to first)
+    personality = all_personalities.get(character)
+    if not personality:
+        personality = list(all_personalities.values())[0]
+
+    # Load last 2 interactions for THIS character only
+    cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 2", (character,))
+    history = cur.fetchall()
+    messages = build_messages(personality, history, user_input)
 
     # Call local LLM via Ollama Python client
     response = ollama_client.chat(
@@ -191,43 +192,11 @@ def chat_stream_api():
         personality = all_personalities.get(character)
         if not personality:
             personality = list(all_personalities.values())[0]
-        char_name = personality.get("name", "Companion")
-        quirks = personality.get("quirks", "")
 
-        # Load history
+        # Load history and build messages
         cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 2", (character,))
         history = cur.fetchall()
-
-        # Build messages
-        messages = [
-            {
-                "role": "system",
-                "content": (
-                    f"Your name is {char_name}. You are an anime-style desktop companion.\n"
-                    f"IMPORTANT: Your name is {char_name}, never use any other name.\n"
-                    f"Tone: {personality['tone']}. "
-                    f"Energy: {personality['energy']}. "
-                    f"Humor: {personality['humor']}. "
-                    f"Verbosity: {personality['verbosity']}.\n"
-                    f"Personality: {quirks}\n"
-                    f"Stay consistent with this personality. "
-                    f"Respond naturally, like a character, not an assistant. "
-                    f"But don't overdo the anime style, keep it balanced and natural. "
-                    f"Keep responses short — 1 to 3 sentences max.\n"
-                    f"CRITICAL: You MUST include 1-2 physical emotes per reply in *asterisks*.\n"
-                    f"Use ONLY emotes from this list: {personality.get('emote_list', '*nods* *shrugs* *tilts head*')}\n"
-                    f"IMPORTANT: Keep emotes SHORT (1-3 words max). "
-                    f"WRONG: *bounces up and down excitedly in seat* "
-                    f"RIGHT: *bounces* or *nods*"
-                ),
-            }
-        ]
-        messages.append({"role": "user", "content": "What should I call you?"})
-        messages.append({"role": "assistant", "content": f"*waves* I'm {char_name}! Nice to meet you~"})
-        for u, a in reversed(history):
-            messages.append({"role": "user", "content": u})
-            messages.append({"role": "assistant", "content": a})
-        messages.append({"role": "user", "content": user_input})
+        messages = build_messages(personality, history, user_input)
 
         def generate():
             try:
@@ -319,6 +288,21 @@ def transcribe_audio():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/memory/clear", methods=["POST"])
+def memory_clear():
+    """Clear conversation memory for a character."""
+    try:
+        data = request.get_json() or {}
+        character = data.get("character", "female_default")
+        conn = get_db()
+        conn.execute("DELETE FROM memory WHERE character = ?", (character,))
+        conn.commit()
+        conn.close()
+        return jsonify({"ok": True, "character": character})
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 

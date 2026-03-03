@@ -17,6 +17,7 @@ public class CompanionController : MonoBehaviour
     public GameObject switchButton;
 
     private string streamUrl = "http://127.0.0.1:5001/chat/stream";
+    private string clearUrl  = "http://127.0.0.1:5001/memory/clear";
 
     // Text chat toggle
     private bool textChatVisible = false;
@@ -28,7 +29,8 @@ public class CompanionController : MonoBehaviour
 
     // Guards ResumeGesturesAfterEmote — true while a streaming request is in flight.
     // Set to false on the done event so we never restart the gesture loop after streaming ends.
-    private bool _isStreaming = false;
+    private bool _isStreaming  = false;
+    private Coroutine _dotCoroutine; // animated loading dots while waiting for first token
 
     // --- Design tokens ---
     static readonly Color BgPanel     = new Color(0.05f, 0.06f, 0.11f, 0.82f); // deep navy, translucent
@@ -365,6 +367,35 @@ public class CompanionController : MonoBehaviour
             micIcon.enableWordWrapping = false;
             micLabel = micIcon; // saved for dynamic label updates
 
+            // ── Clear memory button ───────────────────────────────────────
+            GameObject clrBtn = new GameObject("ClearButton");
+            clrBtn.transform.SetParent(chatPanel.transform, false);
+            var clrBg = clrBtn.AddComponent<Image>();
+            clrBg.color = new Color(0.18f, 0.10f, 0.10f, 0.90f);
+            MakeRounded(clrBg);
+            var clrLE = clrBtn.AddComponent<LayoutElement>();
+            clrLE.minWidth = 38f; clrLE.preferredWidth = 38f;
+            clrLE.minHeight = 38f; clrLE.preferredHeight = 38f;
+            clrLE.flexibleWidth = 0f;
+            var clrBtnComp = clrBtn.AddComponent<Button>();
+            var clrCols = clrBtnComp.colors;
+            clrCols.normalColor      = new Color(0.18f, 0.10f, 0.10f, 0.90f);
+            clrCols.highlightedColor = new Color(0.28f, 0.14f, 0.14f, 1f);
+            clrCols.pressedColor     = new Color(0.38f, 0.18f, 0.18f, 1f);
+            clrCols.fadeDuration     = 0.12f;
+            clrBtnComp.colors = clrCols;
+            clrBtnComp.onClick.AddListener(() => StartCoroutine(ClearMemory()));
+            var clrIconObj = new GameObject("Icon");
+            clrIconObj.transform.SetParent(clrBtn.transform, false);
+            var clrIconRect = clrIconObj.AddComponent<RectTransform>();
+            clrIconRect.anchorMin = Vector2.zero; clrIconRect.anchorMax = Vector2.one;
+            clrIconRect.sizeDelta = Vector2.zero; clrIconRect.offsetMin = Vector2.zero; clrIconRect.offsetMax = Vector2.zero;
+            var clrIcon = clrIconObj.AddComponent<TextMeshProUGUI>();
+            clrIcon.text = "CLR"; clrIcon.fontSize = 10f;
+            clrIcon.color = new Color(0.70f, 0.35f, 0.35f, 1f);
+            clrIcon.alignment = TextAlignmentOptions.Center;
+            clrIcon.enableWordWrapping = false;
+
             // Ensure close button stays last
             closeBtn.transform.SetAsLastSibling();
         }
@@ -606,11 +637,9 @@ public class CompanionController : MonoBehaviour
 
     IEnumerator SendToAI(string message)
     {
-        // Show "..." immediately — give visual feedback while waiting for the first token.
+        // Show animated loading dots while waiting for the first token.
         // Cancel any running dismiss timer but do NOT start a new one; the bubble must stay
         // until the response arrives (which can take several seconds on local Ollama).
-        if (speechBubbleText != null) speechBubbleText.text = "...";
-
         if (speechBubble != null)
         {
             var loadImg = speechBubble.GetComponent<Image>();
@@ -620,6 +649,8 @@ public class CompanionController : MonoBehaviour
             if (_bubbleDismissTimer != null) { StopCoroutine(_bubbleDismissTimer); _bubbleDismissTimer = null; }
             speechBubble.SetActive(true);
         }
+        if (_dotCoroutine != null) StopCoroutine(_dotCoroutine);
+        _dotCoroutine = StartCoroutine(AnimateThinkingDots());
 
         // Send current character so backend uses the right personality
         string charName = CharacterManager.Instance != null
@@ -706,6 +737,7 @@ public class CompanionController : MonoBehaviour
                                             .Replace(done.reply, @"\*[^*]+\*", "");
                                         safeReply = System.Text.RegularExpressions.Regex
                                             .Replace(safeReply, @"\s{2,}", " ").Trim();
+                                        if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
                                         ShowBubble(safeReply);
                                     }
                                     // Stop talking mouth
@@ -755,8 +787,11 @@ public class CompanionController : MonoBehaviour
                                             display, @"\*[^*]*$", "");
                                         display = System.Text.RegularExpressions.Regex.Replace(
                                             display, @"\s{2,}", " ").Trim();
-                                        if (speechBubbleText != null)
+                                        if (display.Length > 0)
+                                        {
+                                            if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
                                             ShowBubble(display);
+                                        }
                                     }
                                 }
                             }
@@ -774,6 +809,7 @@ public class CompanionController : MonoBehaviour
             if (req.result != UnityWebRequest.Result.Success)
             {
                 _isStreaming = false;
+                if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
                 ShowBubble("Connection error."); // auto-dismisses after BubbleHoldTime
                 Debug.LogError(req.error);
                 if (faceAnim != null)
@@ -801,6 +837,35 @@ public class CompanionController : MonoBehaviour
         // and StopTalkingGestures was already called — calling Start again would loop forever.
         if (_isStreaming)
             emoteAnimator.StartTalkingGestures();
+    }
+
+    private IEnumerator AnimateThinkingDots()
+    {
+        string[] frames = { ".  ", ".. ", "..." };
+        int i = 0;
+        while (true)
+        {
+            if (speechBubbleText != null) speechBubbleText.text = frames[i % 3];
+            i++;
+            yield return new WaitForSeconds(0.4f);
+        }
+    }
+
+    IEnumerator ClearMemory()
+    {
+        string charName = CharacterManager.Instance != null
+            ? CharacterManager.Instance.GetCurrentCharacterName()
+            : "female_default";
+        string jsonBody = JsonUtility.ToJson(new ClearRequest { character = charName });
+        byte[] bodyRaw = System.Text.Encoding.UTF8.GetBytes(jsonBody);
+        using (UnityWebRequest req = new UnityWebRequest(clearUrl, "POST"))
+        {
+            req.uploadHandler   = new UploadHandlerRaw(bodyRaw);
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+            yield return req.SendWebRequest();
+        }
+        ShowBubble("Memory cleared.");
     }
 
     private void TriggerEmotes(string[] emotes)
@@ -884,6 +949,12 @@ public class CompanionController : MonoBehaviour
         public string reply;
         public string[] emotes;
         public string emotion;
+    }
+
+    [System.Serializable]
+    private class ClearRequest
+    {
+        public string character;
     }
 
     [System.Serializable]
