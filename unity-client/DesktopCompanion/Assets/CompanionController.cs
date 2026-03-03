@@ -45,9 +45,12 @@ public class CompanionController : MonoBehaviour
 
     // Runtime refs to programmatic elements
     private GameObject chatPanel;      // bottom bar
-    private GameObject toggleButton;   // 💬 button shown when chat is closed
+    private GameObject toggleButton;   // button shown when chat is closed
     private Image micButtonImage;      // ref for colour pulsing when recording
     private TMP_Text micLabel;         // ref for "MIC" / "REC" label updates
+    private Button _sendBtn;           // ref to lock/unlock during streaming
+    private Image  _statusDot;         // green/red connection indicator
+    private const string HealthUrl = "http://127.0.0.1:5001/character";
 
     // Exposed for VoiceInputManager
     public Image  MicButtonImage    => micButtonImage;
@@ -70,6 +73,7 @@ public class CompanionController : MonoBehaviour
         StyleSpeechBubble();
         BuildChatPanel(canvas);
         BuildToggleButton(canvas);
+        BuildStatusDot(canvas);
 
         UpdateCharacterNameUI();
         SetTextChatVisible(false);
@@ -77,6 +81,9 @@ public class CompanionController : MonoBehaviour
         // Auto-attach VoiceInputManager if not already present
         if (GetComponent<VoiceInputManager>() == null)
             gameObject.AddComponent<VoiceInputManager>();
+
+        // Start periodic backend health-check
+        StartCoroutine(HealthCheckLoop());
     }
 
     // ── Speech bubble ────────────────────────────────────────────────────────
@@ -315,6 +322,7 @@ public class CompanionController : MonoBehaviour
             var sendBtn = sendButton.GetComponent<Button>();
             if (sendBtn != null)
             {
+                _sendBtn = sendBtn;
                 var cols = sendBtn.colors;
                 cols.normalColor      = AccentColor;
                 cols.highlightedColor = AccentHover;
@@ -504,6 +512,47 @@ public class CompanionController : MonoBehaviour
         icon.enableWordWrapping = false;
     }
 
+    // ── Status dot ────────────────────────────────────────────────────────────
+    /// <summary>
+    /// A small circle in the bottom-right corner: green = backend reachable, red = offline.
+    /// </summary>
+    private void BuildStatusDot(Canvas canvas)
+    {
+        if (canvas == null) return;
+
+        var dotObj = new GameObject("StatusDot");
+        dotObj.transform.SetParent(canvas.transform, false);
+
+        var rect = dotObj.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 0f);
+        rect.anchorMax = new Vector2(1f, 0f);
+        rect.pivot     = new Vector2(1f, 0f);
+        rect.anchoredPosition = new Vector2(-10f, 10f);
+        rect.sizeDelta = new Vector2(8f, 8f);
+
+        _statusDot = dotObj.AddComponent<Image>();
+        _statusDot.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/Knob.psd");
+        _statusDot.color  = new Color(0.3f, 0.7f, 0.4f, 0.85f); // green — optimistic default
+    }
+
+    private IEnumerator HealthCheckLoop()
+    {
+        while (true)
+        {
+            using (UnityWebRequest req = UnityWebRequest.Get(HealthUrl))
+            {
+                req.timeout = 2;
+                yield return req.SendWebRequest();
+                bool ok = req.result == UnityWebRequest.Result.Success;
+                if (_statusDot != null)
+                    _statusDot.color = ok
+                        ? new Color(0.3f, 0.7f, 0.4f, 0.85f)   // green
+                        : new Color(0.85f, 0.3f, 0.3f, 0.85f);  // red
+            }
+            yield return new WaitForSeconds(5f);
+        }
+    }
+
     /// <summary>
     /// Per-frame keyboard shortcuts — only fire when the text input field is not focused.
     /// </summary>
@@ -629,6 +678,7 @@ public class CompanionController : MonoBehaviour
     public void OnSendMessage()
     {
         if (userInputField == null) return;
+        if (_isStreaming) return; // ignore while a response is in flight
         string message = userInputField.text.Trim();
         if (string.IsNullOrEmpty(message)) return;
         userInputField.text = "";
@@ -671,6 +721,7 @@ public class CompanionController : MonoBehaviour
             req.SetRequestHeader("Content-Type", "application/json");
 
             _isStreaming = true;
+            SetInputLocked(true);
             req.SendWebRequest();
 
             string fullRawText = "";
@@ -743,6 +794,8 @@ public class CompanionController : MonoBehaviour
                                     // Stop talking mouth
                                     if (faceAnim != null)
                                         faceAnim.StopTalking();
+                                    _isStreaming = false;
+                                    SetInputLocked(false);
                                 }
                                 else
                                 {
@@ -809,6 +862,7 @@ public class CompanionController : MonoBehaviour
             if (req.result != UnityWebRequest.Result.Success)
             {
                 _isStreaming = false;
+                SetInputLocked(false);
                 if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
                 ShowBubble("Connection error."); // auto-dismisses after BubbleHoldTime
                 Debug.LogError(req.error);
@@ -837,6 +891,20 @@ public class CompanionController : MonoBehaviour
         // and StopTalkingGestures was already called — calling Start again would loop forever.
         if (_isStreaming)
             emoteAnimator.StartTalkingGestures();
+    }
+
+    private void SetInputLocked(bool locked)
+    {
+        if (userInputField != null) userInputField.interactable = !locked;
+        if (_sendBtn != null)
+        {
+            _sendBtn.interactable = !locked;
+            var img = _sendBtn.GetComponent<Image>();
+            if (img != null)
+                img.color = locked
+                    ? new Color(AccentDim.r, AccentDim.g, AccentDim.b, 0.5f)  // dimmed while waiting
+                    : AccentColor;
+        }
     }
 
     private IEnumerator AnimateThinkingDots()
