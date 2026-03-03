@@ -94,14 +94,16 @@ public class CharacterManager : MonoBehaviour
                 ? EmoteAnimator.CharacterStyle.Reserved
                 : EmoteAnimator.CharacterStyle.Expressive;
 
-        // Tune idle animation amplitude to match personality
+        // Tune idle animation amplitude to match personality.
+        // Luna defaults (after tuning pass): headTilt=2.0, headTurn=3.0, sway=1.2, armSway=0.8
+        // Ren is ~50% on tilt/turn and ~40% on sway/arm to stay composed and deliberate.
         var idleAnim = currentModel.GetComponent<IdleAnimator>();
         if (idleAnim != null && isReserved)
         {
-            idleAnim.headTiltAmount = 2f;   // Luna=4f  — Ren barely tilts his head
-            idleAnim.headTurnAmount = 3.5f; // Luna=6f  — Ren looks around less
-            idleAnim.swayAmount     = 1.2f; // Luna=3f  — Ren stands more composed
-            idleAnim.armSwayAmount  = 0.8f; // Luna=2f  — Ren's arms are stiller at rest
+            idleAnim.headTiltAmount = 1.0f; // Luna=2.0  — Ren barely tilts his head
+            idleAnim.headTurnAmount = 1.8f; // Luna=3.0  — Ren looks around less
+            idleAnim.swayAmount     = 0.5f; // Luna=1.2  — Ren stands more composed
+            idleAnim.armSwayAmount  = 0.3f; // Luna=0.8  — Ren's arms are stiller at rest
         }
 
         currentCharacterIndex = index;
