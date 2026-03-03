@@ -61,7 +61,8 @@ public class VoiceInputManager : MonoBehaviour
         if (controller != null)
         {
             pulseCoroutine = StartCoroutine(PulseMicButton());
-            controller.SetStatusText("Listening...");
+            controller.SetMicActiveLabel(true);
+            controller.SetStatusText("Listening... (press M or Mic again to stop)");
         }
 
         Debug.Log($"[Voice] Recording started on '{micDevice}'");
@@ -81,8 +82,9 @@ public class VoiceInputManager : MonoBehaviour
             pulseCoroutine = null;
         }
 
-        // Restore mic button colour
+        // Restore mic button colour and label
         SetMicButtonColor(controller != null ? controller.InputBgColor : new Color(0.12f, 0.12f, 0.18f, 0.95f));
+        if (controller != null) controller.SetMicActiveLabel(false);
 
         if (samplePos < 100)
         {

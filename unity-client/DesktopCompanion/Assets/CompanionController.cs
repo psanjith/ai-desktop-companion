@@ -44,6 +44,8 @@ public class CompanionController : MonoBehaviour
     private GameObject chatPanel;      // bottom bar
     private GameObject toggleButton;   // 💬 button shown when chat is closed
     private Image micButtonImage;      // ref for colour pulsing when recording
+    private TMP_Text micLabel;         // ref for "MIC" / "REC" label updates
+    private GameObject hintsBar;       // keyboard shortcuts strip
 
     // Exposed for VoiceInputManager
     public Image  MicButtonImage    => micButtonImage;
@@ -66,9 +68,11 @@ public class CompanionController : MonoBehaviour
         StyleSpeechBubble();
         BuildChatPanel(canvas);
         BuildToggleButton(canvas);
+        BuildHintsBar(canvas);
 
         UpdateCharacterNameUI();
         SetTextChatVisible(false);
+        StartCoroutine(ShowWelcomeBubble());
 
         // Auto-attach VoiceInputManager if not already present
         if (GetComponent<VoiceInputManager>() == null)
@@ -265,11 +269,13 @@ public class CompanionController : MonoBehaviour
                 var ph = userInputField.placeholder.GetComponent<TMP_Text>();
                 if (ph != null)
                 {
-                    ph.text     = "Message...";
-                    ph.fontSize = 15f;
+                    ph.text     = "Type a message... (M = mic, C = toggle chat)";
+                    ph.fontSize = 13f;
                     ph.color    = TextMuted;
                 }
             }
+            // Enter key submits the message
+            userInputField.onSubmit.AddListener(_ => OnSendMessage());
         }
 
         // Reparent Send button into panel
@@ -336,8 +342,10 @@ public class CompanionController : MonoBehaviour
             micIconRect.sizeDelta = Vector2.zero; micIconRect.offsetMin = Vector2.zero; micIconRect.offsetMax = Vector2.zero;
             var micIcon = micIconObj.AddComponent<TextMeshProUGUI>();
             micIcon.text = "MIC"; micIcon.fontSize = 11f;
+            micIcon.color = TextMuted;
             micIcon.alignment = TextAlignmentOptions.Center;
             micIcon.enableWordWrapping = false;
+            micLabel = micIcon; // saved for dynamic label updates
 
             // Ensure close button stays last
             closeBtn.transform.SetAsLastSibling();
@@ -373,9 +381,10 @@ public class CompanionController : MonoBehaviour
             var swLabel = switchButton.GetComponentInChildren<TMP_Text>();
             if (swLabel != null)
             {
-                swLabel.text      = "<>";
+                swLabel.text      = "NEXT";
                 swLabel.color     = TextMuted;
-                swLabel.fontSize  = 18f;
+                swLabel.fontSize  = 11f;
+                swLabel.fontStyle = FontStyles.Bold;
                 swLabel.alignment = TextAlignmentOptions.Center;
             }
         }
@@ -383,8 +392,8 @@ public class CompanionController : MonoBehaviour
         // Style character name (top-left of panel, outside layout)
         if (characterNameText != null)
         {
-            characterNameText.color    = TextMuted;
-            characterNameText.fontSize = 11f;
+            characterNameText.color    = new Color(0.72f, 0.74f, 0.95f, 1f); // soft accent, more visible
+            characterNameText.fontSize = 12f;
             characterNameText.fontStyle = FontStyles.Bold;
 
             var nameRect = characterNameText.GetComponent<RectTransform>();
@@ -444,6 +453,24 @@ public class CompanionController : MonoBehaviour
     }
 
     /// <summary>
+    /// Per-frame keyboard shortcuts — only fire when the text input field is not focused.
+    /// </summary>
+    void Update()
+    {
+        if (userInputField != null && userInputField.isFocused) return;
+
+        // M = toggle microphone
+        if (Input.GetKeyDown(KeyCode.M))
+        {
+            var vim = GetComponent<VoiceInputManager>();
+            if (vim != null) vim.OnMicButtonPressed();
+        }
+        // C = toggle chat panel open/closed
+        if (Input.GetKeyDown(KeyCode.C))
+            OnToggleChat();
+    }
+
+    /// <summary>
     /// Called by the chat toggle button.
     /// </summary>
     public void OnToggleChat()
@@ -458,6 +485,10 @@ public class CompanionController : MonoBehaviour
         // Show/hide the whole bottom chat panel
         if (chatPanel != null)
             chatPanel.SetActive(visible);
+
+        // Keyboard hints strip — visible only when chat is open
+        if (hintsBar != null)
+            hintsBar.SetActive(visible);
 
         // 💬 button always stays visible as a fallback
         if (toggleButton != null)
@@ -482,6 +513,72 @@ public class CompanionController : MonoBehaviour
             HideBubble();
         else
             ShowBubble(text);
+    }
+
+    /// <summary>
+    /// Updates the mic button label — called by VoiceInputManager when recording starts/stops.
+    /// </summary>
+    public void SetMicActiveLabel(bool recording)
+    {
+        if (micLabel == null) return;
+        micLabel.text  = recording ? "REC" : "MIC";
+        micLabel.color = recording
+            ? new Color(1.00f, 0.40f, 0.40f, 1f)  // bright red while recording
+            : TextMuted;
+    }
+
+    /// <summary>
+    /// Builds a thin keyboard-shortcut hints strip that sits just above the chat bar.
+    /// Visible only while the chat panel is open.
+    /// </summary>
+    private void BuildHintsBar(Canvas canvas)
+    {
+        if (canvas == null) return;
+
+        hintsBar = new GameObject("HintsBar");
+        hintsBar.transform.SetParent(canvas.transform, false);
+
+        var rect = hintsBar.AddComponent<RectTransform>();
+        rect.anchorMin        = new Vector2(0f, 0f);
+        rect.anchorMax        = new Vector2(1f, 0f);
+        rect.pivot            = new Vector2(0.5f, 0f);
+        rect.anchoredPosition = new Vector2(0f, 64f); // just above the 64px chat bar
+        rect.sizeDelta        = new Vector2(0f, 20f);
+
+        var bg = hintsBar.AddComponent<Image>();
+        bg.color = new Color(0.04f, 0.04f, 0.07f, 0.80f);
+
+        var textObj  = new GameObject("HintText");
+        textObj.transform.SetParent(hintsBar.transform, false);
+        var textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.sizeDelta = Vector2.zero;
+        textRect.offsetMin = new Vector2(8f, 0f);
+        textRect.offsetMax = new Vector2(-8f, 0f);
+
+        var hint = textObj.AddComponent<TextMeshProUGUI>();
+        hint.text               = "Enter = Send  |  M = Mic  |  C = Toggle Chat  |  Scroll = Resize  |  Drag = Move  |  ESC = Quit";
+        hint.fontSize           = 9.5f;
+        hint.color              = new Color(0.45f, 0.47f, 0.60f, 0.80f);
+        hint.alignment          = TextAlignmentOptions.Center;
+        hint.enableWordWrapping = false;
+
+        hintsBar.SetActive(false); // hidden until chat opens
+    }
+
+    /// <summary>
+    /// Shows a one-time welcome message in the speech bubble on first launch.
+    /// </summary>
+    private IEnumerator ShowWelcomeBubble()
+    {
+        if (PlayerPrefs.GetInt("WelcomeSeen_v1", 0) == 1) yield break;
+
+        yield return new WaitForSeconds(2f); // let the model and window settle
+
+        ShowBubble("Hi! Press C or click Chat to type a message. Press M to use your mic. Drag to move me, scroll to resize!");
+        PlayerPrefs.SetInt("WelcomeSeen_v1", 1);
+        PlayerPrefs.Save();
     }
 
     /// <summary>
