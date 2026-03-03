@@ -1,6 +1,5 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 /// <summary>
@@ -49,57 +48,6 @@ public class EmoteAnimator : MonoBehaviour
         CaptureOriginalState();
         poseManager = GetComponent<PoseManager>();
         idleAnimator = GetComponent<IdleAnimator>();
-        StartCoroutine(LogBoneAxes());
-    }
-
-    /// <summary>
-    /// ONE-SHOT DIAGNOSTIC — logs the world-space direction each local axis points for the
-    /// right upper arm, lower arm, and hand at rest pose.  Remove after reading the output.
-    /// </summary>
-    IEnumerator LogBoneAxes()
-    {
-        // Wait two frames so PoseManager has applied the rest pose
-        yield return null;
-        yield return null;
-
-        Animator anim = GetComponentInChildren<Animator>();
-        if (anim == null || !anim.isHuman) yield break;
-
-        HumanBodyBones[] bones = {
-            HumanBodyBones.RightUpperArm,
-            HumanBodyBones.RightLowerArm,
-            HumanBodyBones.RightHand,
-        };
-
-        System.Text.StringBuilder sb = new System.Text.StringBuilder();
-        sb.AppendLine("=== BONE AXIS DIAGNOSTIC (rest pose) ===");
-        foreach (var b in bones)
-        {
-            Transform t = anim.GetBoneTransform(b);
-            if (t == null) { sb.AppendLine($"{b}: NOT FOUND"); continue; }
-
-            // Local axes expressed in world space
-            Vector3 localX = t.TransformDirection(Vector3.right);   // +X
-            Vector3 localY = t.TransformDirection(Vector3.up);      // +Y
-            Vector3 localZ = t.TransformDirection(Vector3.forward); // +Z
-            sb.AppendLine($"{b}:");
-            sb.AppendLine($"  localRot = {t.localRotation.eulerAngles}");
-            sb.AppendLine($"  +X world = {localX:F2}  (rotate +X euler → arm moves toward {DescribeDir(localX)})");
-            sb.AppendLine($"  +Y world = {localY:F2}  (rotate +Y euler → arm moves toward {DescribeDir(localY)})");
-            sb.AppendLine($"  +Z world = {localZ:F2}  (rotate +Z euler → arm moves toward {DescribeDir(localZ)})");
-        }
-        sb.AppendLine("=== END DIAGNOSTIC ===");
-        Debug.Log(sb.ToString());
-    }
-
-    private static string DescribeDir(Vector3 d)
-    {
-        string x = d.x >  0.4f ? "RIGHT" : d.x < -0.4f ? "LEFT"  : "";
-        string y = d.y >  0.4f ? "UP"    : d.y < -0.4f ? "DOWN"  : "";
-        string z = d.z >  0.4f ? "FWD"   : d.z < -0.4f ? "BACK"  : "";
-        return string.Join("/", new[]{ x, y, z }.Where(s => s != "")).Length > 0
-             ? string.Join("/", new[]{ x, y, z }.Where(s => s != ""))
-             : "DIAGONAL";
     }
 
     public void CaptureOriginalState()
@@ -1246,34 +1194,40 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion headRest  = head  != null ? head.localRotation  : Quaternion.identity;
             Quaternion spineRest = spine != null ? spine.localRotation : Quaternion.identity;
 
-            // Axis reference (confirmed from DoStretch/DoShrug/DoClap):
-            //   Right arm overhead = Euler(-120f, 0f, -20f)   → negative X = up/forward, negative Z = up
-            //   Right arm out to side = Euler(-30f, 0f, +15f) → positive Z = outward/sideways
-            //   Right arm forward (clap) = Euler(-50f, -20f, -15f)
+            // CONFIRMED axes from bone diagnostic:
+            //   RightUpperArm +X world → DOWN   ∴ -X raises the arm UP
+            //   RightUpperArm +Y world → LEFT   ∴ +Y swings arm forward/outward (away from body)
+            //   RightUpperArm +Z world → BACK   ∴ Z is the roll axis along arm — don't use for raise
             //
-            // Wave target: arm at ~shoulder-height in front, elbow bent so forearm points up.
-            // Use ~70% of the stretch height (-85 X) + slight inward pull (-20 Y) + small -10 Z up.
-            Quaternion armRaised = armRest   * Quaternion.Euler(-85f, -20f, -10f);
-            // Elbow bend: DoClap uses -60f X successfully at lower arm.
-            Quaternion lowerBent = lowerRest * Quaternion.Euler(-60f, 0f, 0f);
-            Quaternion headTilt  = headRest  * Quaternion.Euler(0f, 0f, -8f);
-            Quaternion spineLean = spineRest * Quaternion.Euler(0f, 0f, -4f);
+            // Wave pose: arm raised to ~shoulder height, elbow naturally following.
+            //   -60 X  = arm up (60° worth of upward rotation)
+            //   +30 Y  = arm swung forward so it faces the viewer, not straight to the side
+            Quaternion armRaised = armRest * Quaternion.Euler(-60f, 30f, 0f);
 
-            // With arm raised forward, the wrist's local Y axis is the side-to-side wave axis.
-            Quaternion handWaveA = handRest * Quaternion.Euler(0f,  28f, 0f);
-            Quaternion handWaveB = handRest * Quaternion.Euler(0f, -28f, 0f);
+            // Lower arm: -X also raises the forearm (same axis direction).
+            // Small negative X keeps the elbow slightly bent without collapsing.
+            Quaternion lowerBent = lowerRest * Quaternion.Euler(-20f, 0f, 0f);
 
-            // Small windup before raise
-            Quaternion armWindup = armRest * Quaternion.Euler(4f, 0f, 5f);
+            // Head tilts slightly toward the waving arm (its +Z is BACK so don't use it;
+            // use the head's own local axes — small Y turn looks natural).
+            Quaternion headTilt  = headRest  * Quaternion.Euler(0f, -10f, 0f);
+            Quaternion spineLean = spineRest * Quaternion.Euler(0f, 0f, -3f);
+
+            // Hand wave: hand +X → DOWN/LEFT, so ±X rocks the hand side-to-side as seen by viewer.
+            Quaternion handWaveA = handRest * Quaternion.Euler( 25f, 0f, 0f);
+            Quaternion handWaveB = handRest * Quaternion.Euler(-25f, 0f, 0f);
+
+            // Small windup (tiny +X = slight drop) before the raise
+            Quaternion armWindup = armRest * Quaternion.Euler(5f, 0f, 0f);
             yield return RotateBoneOverTime(rightArm, armRest, armWindup, 0.07f);
 
-            // Raise arm + bend elbow simultaneously
+            // Raise arm and bend elbow simultaneously
             yield return RotateBoneOverTime(rightArm, armWindup, armRaised, 0.2f);
             if (rightLower != null) rightLower.localRotation = lowerBent;
             if (head  != null) head.localRotation  = headTilt;
             if (spine != null) spine.localRotation = spineLean;
 
-            // Wave: hand rotates side-to-side, arm stays still
+            // Wave: only the hand rocks side-to-side, arm is still
             for (int i = 0; i < 3; i++)
             {
                 if (rightHand != null)
