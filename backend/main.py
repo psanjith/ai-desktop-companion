@@ -2,6 +2,7 @@ import sqlite3
 import json
 import os
 import re
+import threading
 from flask import Flask, request, jsonify, Response, stream_with_context
 
 # Pre-load Whisper model once at startup — avoids ~2s reload on every /transcribe call
@@ -81,6 +82,67 @@ def _reply_from_response(response) -> str:
     return response.choices[0].message.content.strip()
 
 
+# ── Emotion tag parser ────────────────────────────────────────────────────────
+_EMOTION_RE = re.compile(r'\[e:(joy|fun|angry|sorrow|neutral)\]', re.IGNORECASE)
+
+def _parse_emotion_tag(text: str):
+    """Extract [e:emotion] tag that the LLM appends. Returns (emotion|None, cleaned_text)."""
+    m = _EMOTION_RE.search(text)
+    if m:
+        return m.group(1).lower(), _EMOTION_RE.sub('', text).strip()
+    return None, text
+
+
+# ── Long-term user facts ──────────────────────────────────────────────────────
+def _extract_facts_bg(character: str, user_msg: str):
+    """Background thread: ask LLM to pull personal facts from the user's message and save them."""
+    try:
+        extr_messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You are a fact extractor. Read the user message and extract any memorable "
+                    "personal facts (name, job, hobbies, favourite things, pets, etc.).\n"
+                    "Reply ONLY with a JSON array of short strings, e.g. [\"name is Alex\", \"likes Python\"].\n"
+                    "If there are no personal facts, reply with [].\n"
+                    "Max 3 facts. Each fact must be under 80 characters."
+                )
+            },
+            {"role": "user", "content": user_msg}
+        ]
+        resp = _llm_call(extr_messages, stream=False)
+        raw = _reply_from_response(resp).strip()
+        m = re.search(r'\[.*?\]', raw, re.DOTALL)
+        if not m:
+            return
+        facts_list = json.loads(m.group())
+        if not isinstance(facts_list, list) or not facts_list:
+            return
+        conn = sqlite3.connect(MEMORY_DB_PATH)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS facts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                character TEXT NOT NULL,
+                fact TEXT NOT NULL,
+                UNIQUE(character, fact)
+            )
+        """)
+        saved = 0
+        for fact in facts_list[:3]:
+            if isinstance(fact, str) and 3 < len(fact) < 120:
+                conn.execute(
+                    "INSERT OR IGNORE INTO facts (character, fact) VALUES (?, ?)",
+                    (character, fact.strip())
+                )
+                saved += 1
+        conn.commit()
+        conn.close()
+        if saved:
+            print(f"[Facts] Stored {saved} fact(s) for {character}: {facts_list[:3]}")
+    except Exception as exc:
+        print(f"[Facts] Extraction error: {exc}")
+
+
 # Flask app
 app = Flask(__name__)
 
@@ -130,14 +192,31 @@ def get_db():
             ai TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS facts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            character TEXT NOT NULL,
+            fact TEXT NOT NULL,
+            UNIQUE(character, fact)
+        )
+    """)
     conn.commit()
     return conn
 
 
-def build_messages(personality, history, user_input):
+def build_messages(personality, history, user_input, facts=None):
     """Build the LLM messages list — shared by /chat and /chat/stream."""
     char_name = personality.get("name", "Companion")
     quirks = personality.get("quirks", "")
+
+    facts_section = ""
+    if facts:
+        facts_str = "\n".join(f"- {f}" for f in facts[:10])
+        facts_section = (
+            f"\nThings you know about the user "
+            f"(weave these in naturally when relevant, never force it):\n{facts_str}\n"
+        )
+
     messages = [
         {
             "role": "system",
@@ -149,6 +228,7 @@ def build_messages(personality, history, user_input):
                 f"Humor: {personality['humor']}. "
                 f"Verbosity: {personality['verbosity']}.\n"
                 f"Personality: {quirks}\n"
+                f"{facts_section}"
                 f"Stay consistent with this personality. "
                 f"Respond naturally, like a character, not an assistant. "
                 f"But don't overdo the anime style, keep it balanced and natural. "
@@ -157,12 +237,14 @@ def build_messages(personality, history, user_input):
                 f"Use ONLY emotes from this list: {personality.get('emote_list', '*nods* *shrugs* *tilts head*')}\n"
                 f"IMPORTANT: Keep emotes SHORT (1-3 words max). "
                 f"WRONG: *bounces up and down excitedly in seat* "
-                f"RIGHT: *bounces* or *nods*"
+                f"RIGHT: *bounces* or *nods*\n"
+                f"REQUIRED: End every reply with exactly one emotion tag on its own: "
+                f"[e:joy] [e:fun] [e:angry] [e:sorrow] or [e:neutral]"
             ),
         }
     ]
     messages.append({"role": "user", "content": "What should I call you?"})
-    messages.append({"role": "assistant", "content": f"*waves* I'm {char_name}! Nice to meet you~"})
+    messages.append({"role": "assistant", "content": f"*waves* I'm {char_name}! Nice to meet you~ [e:joy]"})
     for u, a in reversed(history):
         messages.append({"role": "user", "content": u})
         messages.append({"role": "assistant", "content": a})
@@ -186,11 +268,19 @@ def chat(user_input, character="female_default"):
     # Load last 8 interactions for THIS character only
     cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 8", (character,))
     history = cur.fetchall()
-    messages = build_messages(personality, history, user_input)
+
+    # Load long-term user facts and inject into prompt
+    facts = [r[0] for r in cur.execute(
+        "SELECT fact FROM facts WHERE character = ? ORDER BY id DESC LIMIT 10", (character,)
+    ).fetchall()]
+    messages = build_messages(personality, history, user_input, facts=facts)
 
     # Call LLM via configured provider
     response = _llm_call(messages)
     raw_reply = _reply_from_response(response)
+
+    # Parse structured emotion tag — more reliable than keyword scoring
+    emotion_from_tag, raw_reply = _parse_emotion_tag(raw_reply)
 
     # Extract emotes like *yawns*, *blinks slowly* from reply
     emotes = re.findall(r'\*([^*]+)\*', raw_reply)
@@ -202,9 +292,13 @@ def chat(user_input, character="female_default"):
     # Save to memory (keep raw version so LLM sees its own style)
     cur.execute("INSERT INTO memory (character, user, ai) VALUES (?, ?, ?)", (character, user_input, raw_reply))
     conn.commit()
-
     conn.close()
-    return clean_reply, emotes
+
+    # Extract facts in background — zero latency impact on response
+    if len(user_input) > 15:
+        threading.Thread(target=_extract_facts_bg, args=(character, user_input), daemon=True).start()
+
+    return clean_reply, emotes, emotion_from_tag
 
 
 @app.route("/chat", methods=["POST"])
@@ -215,8 +309,8 @@ def chat_api():
         character = data.get("character", "female_default")
         if not user_input:
             return jsonify({"error": "No message provided"}), 400
-        reply, emotes = chat(user_input, character)
-        emotion = detect_emotion(reply, emotes)
+        reply, emotes, emotion_tag = chat(user_input, character)
+        emotion = emotion_tag or detect_emotion(reply, emotes)
         return jsonify({"reply": reply, "emotes": emotes, "emotion": emotion})
     except Exception as e:
         import traceback
@@ -247,7 +341,12 @@ def chat_stream_api():
         # Load history and build messages (last 8 exchanges)
         cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 8", (character,))
         history = cur.fetchall()
-        messages = build_messages(personality, history, user_input)
+
+        # Load long-term user facts and inject into prompt
+        facts = [r[0] for r in cur.execute(
+            "SELECT fact FROM facts WHERE character = ? ORDER BY id DESC LIMIT 10", (character,)
+        ).fetchall()]
+        messages = build_messages(personality, history, user_input, facts=facts)
 
         def generate():
             try:
@@ -259,8 +358,9 @@ def chat_stream_api():
                     # Send each token as an SSE data line
                     yield f"data: {json.dumps({'token': token})}\n\n"
 
-                # Stream is done — extract emotes and send final message
+                # Stream is done — parse emotion tag, extract emotes, build clean reply
                 raw_reply = full_reply.strip()
+                emotion_from_tag, raw_reply = _parse_emotion_tag(raw_reply)
                 emotes = re.findall(r'\*([^*]+)\*', raw_reply)
                 clean_reply = re.sub(r'\*[^*]+\*', '', raw_reply).strip()
                 clean_reply = re.sub(r'\s{2,}', ' ', clean_reply).strip()
@@ -270,8 +370,12 @@ def chat_stream_api():
                             (character, user_input, raw_reply))
                 conn.commit()
 
-                # Detect emotion from the full reply
-                emotion = detect_emotion(clean_reply, emotes)
+                # Prefer LLM-supplied tag; fall back to keyword scoring
+                emotion = emotion_from_tag or detect_emotion(clean_reply, emotes)
+
+                # Extract facts in background — no latency on the stream
+                if len(user_input) > 15:
+                    threading.Thread(target=_extract_facts_bg, args=(character, user_input), daemon=True).start()
 
                 # Send final event with emotes, emotion, and clean reply
                 yield f"data: {json.dumps({'done': True, 'reply': clean_reply, 'emotes': emotes, 'emotion': emotion})}\n\n"
@@ -341,9 +445,25 @@ def memory_clear():
         character = data.get("character", "female_default")
         conn = get_db()
         conn.execute("DELETE FROM memory WHERE character = ?", (character,))
+        conn.execute("DELETE FROM facts  WHERE character = ?", (character,))
         conn.commit()
         conn.close()
         return jsonify({"ok": True, "character": character})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/facts", methods=["GET"])
+def get_facts():
+    """Return stored long-term user facts for a character."""
+    try:
+        character = request.args.get("character", "female_default")
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT id, fact FROM facts WHERE character = ? ORDER BY id", (character,)
+        ).fetchall()
+        conn.close()
+        return jsonify({"character": character, "facts": [{"id": r[0], "fact": r[1]} for r in rows]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

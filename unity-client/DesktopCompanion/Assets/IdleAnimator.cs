@@ -239,15 +239,27 @@ public class IdleAnimator : MonoBehaviour
             hipsBone.localRotation = ChaseTarget(hipsBone.localRotation, target, hipsSmooth);
         }
 
-        // ---- Head: Perlin-based look-around — aperiodic drift with no sine regularity ----
+        // ---- Head: Perlin drift blended with mouse look-at ----
         if (headBone != null)
         {
-            // Perlin gives genuinely non-repeating motion; stillness mask makes head
-            // occasionally settle for a beat, like a real person losing interest momentarily
+            // Organic Perlin component — aperiodic drift with no sine regularity
             float tilt = Perlin(t, headTiltSpeed * _curSpeedMult, headTiltAmount * stillness * _curAmpMult, boneSeeds[4]);
             float turn = Perlin(t, headTurnSpeed * _curSpeedMult, headTurnAmount * stillness * _curAmpMult, boneSeeds[4] + 13f);
             float nod  = Perlin(t, headTiltSpeed * 0.5f * _curSpeedMult, headTiltAmount * 0.4f * stillness * _curAmpMult, boneSeeds[4] + 7f);
-            Quaternion target = headRest * Quaternion.Euler(nod, turn, tilt);
+
+            // Mouse look-at component — head gently tracks where the cursor is on screen
+            // 55% look-at + 45% Perlin keeps it alive and non-robotic
+            float halfW = Screen.width  * 0.5f;
+            float halfH = Screen.height * 0.5f;
+            float mx = halfW > 0f ? (Input.mousePosition.x - halfW) / halfW : 0f;  // [-1, 1]
+            float my = halfH > 0f ? (Input.mousePosition.y - halfH) / halfH : 0f;  // [-1, 1]
+            float lookTurn = Mathf.Clamp(mx * 13f, -13f, 13f);   // yaw  ±13°
+            float lookNod  = Mathf.Clamp(-my *  5f,  -5f,  5f);  // pitch ±5° (cursor up → look up)
+
+            float blendedTurn = turn * 0.45f + lookTurn * 0.55f;
+            float blendedNod  = nod  * 0.45f + lookNod  * 0.55f;
+
+            Quaternion target = headRest * Quaternion.Euler(blendedNod, blendedTurn, tilt);
             headBone.localRotation = ChaseTarget(headBone.localRotation, target, headSmooth);
         }
 
