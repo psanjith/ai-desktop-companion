@@ -33,12 +33,15 @@ public class CompanionController : MonoBehaviour
     private bool _isStreaming = false;
 
     // --- Design tokens ---
-    static readonly Color BgPanel     = new Color(0.07f, 0.07f, 0.11f, 0.88f); // near-black
-    static readonly Color BgInput     = new Color(0.12f, 0.12f, 0.18f, 0.95f); // slightly lighter
-    static readonly Color AccentColor = new Color(0.39f, 0.40f, 0.95f, 1.00f); // indigo
-    static readonly Color AccentDim   = new Color(0.28f, 0.29f, 0.75f, 1.00f); // indigo pressed
-    static readonly Color TextPrimary = new Color(0.95f, 0.95f, 1.00f, 1.00f); // near-white
-    static readonly Color TextMuted   = new Color(0.50f, 0.52f, 0.65f, 1.00f); // muted blue-gray
+    static readonly Color BgPanel     = new Color(0.08f, 0.08f, 0.10f, 0.92f); // deep charcoal, slight transparency
+    static readonly Color BgInput     = new Color(0.13f, 0.13f, 0.16f, 1.00f); // input well
+    static readonly Color BgBubble    = new Color(0.11f, 0.11f, 0.14f, 0.96f); // speech bubble bg
+    static readonly Color BgButton    = new Color(0.17f, 0.17f, 0.22f, 1.00f); // ghost buttons
+    static readonly Color AccentColor = new Color(0.36f, 0.50f, 0.98f, 1.00f); // cool blue-violet
+    static readonly Color AccentHover = new Color(0.46f, 0.59f, 1.00f, 1.00f); // lighter on hover
+    static readonly Color AccentDim   = new Color(0.26f, 0.38f, 0.82f, 1.00f); // pressed
+    static readonly Color TextPrimary = new Color(0.94f, 0.94f, 0.97f, 1.00f); // near-white
+    static readonly Color TextMuted   = new Color(0.46f, 0.48f, 0.58f, 1.00f); // muted
 
     // Runtime refs to programmatic elements
     private GameObject chatPanel;      // bottom bar
@@ -145,39 +148,37 @@ public class CompanionController : MonoBehaviour
     {
         if (speechBubble == null) return;
 
-        // Dark frosted-glass card
+        // Clean card with subtle left accent border via outline trick
         var bg = speechBubble.GetComponent<Image>() ?? speechBubble.AddComponent<Image>();
-        bg.color = BgPanel;
+        bg.color = BgBubble;
 
-        // Anchor top-center, sits above the character
+        // Anchor top-center, floats above the character
         var rect = speechBubble.GetComponent<RectTransform>();
         if (rect != null)
         {
             rect.anchorMin = new Vector2(0.5f, 1f);
             rect.anchorMax = new Vector2(0.5f, 1f);
             rect.pivot     = new Vector2(0.5f, 1f);
-            rect.anchoredPosition = new Vector2(0f, -20f);
-            rect.sizeDelta = new Vector2(340f, 0f); // width fixed, height auto
+            rect.anchoredPosition = new Vector2(0f, -16f);
+            rect.sizeDelta = new Vector2(300f, 0f);
         }
 
-        // Layout group inside bubble
         var layout = speechBubble.GetComponent<VerticalLayoutGroup>() ?? speechBubble.AddComponent<VerticalLayoutGroup>();
-        layout.padding = new RectOffset(16, 16, 12, 12);
+        layout.padding = new RectOffset(14, 14, 10, 10);
         layout.childForceExpandWidth  = true;
         layout.childForceExpandHeight = false;
         layout.childControlWidth  = true;
         layout.childControlHeight = true;
 
-        // Bubble auto-height
         var fitter = speechBubble.GetComponent<ContentSizeFitter>() ?? speechBubble.AddComponent<ContentSizeFitter>();
         fitter.verticalFit   = ContentSizeFitter.FitMode.PreferredSize;
         fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
 
-        // Text styling
         if (speechBubbleText != null)
         {
             speechBubbleText.color = TextPrimary;
-            speechBubbleText.fontSize = 15f;
+            speechBubbleText.fontSize = 14f;
+            speechBubbleText.lineSpacing = 4f;
             speechBubbleText.enableWordWrapping = true;
             speechBubbleText.overflowMode = TextOverflowModes.Overflow;
             speechBubbleText.enableAutoSizing = false;
@@ -206,14 +207,14 @@ public class CompanionController : MonoBehaviour
         panelRect.anchorMax = new Vector2(1, 0);
         panelRect.pivot     = new Vector2(0.5f, 0f);
         panelRect.anchoredPosition = Vector2.zero;
-        panelRect.sizeDelta = new Vector2(0, 64f);
+        panelRect.sizeDelta = new Vector2(0, 56f);
 
         var panelBg = chatPanel.AddComponent<Image>();
         panelBg.color = BgPanel;
 
         var panelLayout = chatPanel.AddComponent<HorizontalLayoutGroup>();
-        panelLayout.padding = new RectOffset(12, 8, 10, 10);
-        panelLayout.spacing = 8f;
+        panelLayout.padding = new RectOffset(10, 8, 8, 8);
+        panelLayout.spacing = 6f;
         panelLayout.childForceExpandWidth  = false;
         panelLayout.childForceExpandHeight = true;
         panelLayout.childControlWidth  = true;
@@ -224,17 +225,18 @@ public class CompanionController : MonoBehaviour
         GameObject closeBtn = new GameObject("CloseButton");
         closeBtn.transform.SetParent(chatPanel.transform, false);
         var closeBg = closeBtn.AddComponent<Image>();
-        closeBg.color = BgInput;
+        closeBg.color = new Color(0f, 0f, 0f, 0f); // transparent background
         var closeButton = closeBtn.AddComponent<Button>();
         var closeCols = closeButton.colors;
-        closeCols.normalColor      = BgInput;
-        closeCols.highlightedColor = new Color(0.25f, 0.10f, 0.10f, 1f);
-        closeCols.pressedColor     = new Color(0.40f, 0.10f, 0.10f, 1f);
+        closeCols.normalColor      = new Color(0f, 0f, 0f, 0f);
+        closeCols.highlightedColor = new Color(1f, 1f, 1f, 0.06f);
+        closeCols.pressedColor     = new Color(1f, 1f, 1f, 0.12f);
+        closeCols.fadeDuration     = 0.08f;
         closeButton.colors = closeCols;
         closeButton.onClick.AddListener(OnToggleChat);
         var closeLE = closeBtn.AddComponent<LayoutElement>();
-        closeLE.minWidth = 36f; closeLE.preferredWidth = 36f;
-        closeLE.minHeight = 36f; closeLE.preferredHeight = 36f;
+        closeLE.minWidth = 32f; closeLE.preferredWidth = 32f;
+        closeLE.minHeight = 32f; closeLE.preferredHeight = 32f;
         closeLE.flexibleWidth = 0f;
         var closeIconObj = new GameObject("Icon");
         closeIconObj.transform.SetParent(closeBtn.transform, false);
@@ -242,8 +244,9 @@ public class CompanionController : MonoBehaviour
         closeIconRect.anchorMin = Vector2.zero; closeIconRect.anchorMax = Vector2.one;
         closeIconRect.sizeDelta = Vector2.zero; closeIconRect.offsetMin = Vector2.zero; closeIconRect.offsetMax = Vector2.zero;
         var closeIcon = closeIconObj.AddComponent<TextMeshProUGUI>();
-        closeIcon.text = "X"; closeIcon.fontSize = 13f;
-        closeIcon.color = TextMuted; closeIcon.alignment = TextAlignmentOptions.Center;
+        closeIcon.text = "✕"; closeIcon.fontSize = 12f;
+        closeIcon.color = new Color(0.38f, 0.40f, 0.50f, 1f);
+        closeIcon.alignment = TextAlignmentOptions.Center;
         closeIcon.enableWordWrapping = false;
         closeBtn.transform.SetAsLastSibling(); // will be placed at end of layout
 
@@ -255,23 +258,24 @@ public class CompanionController : MonoBehaviour
             var inputRect = userInputField.GetComponent<RectTransform>();
             var le = inputRect.GetComponent<LayoutElement>() ?? inputRect.gameObject.AddComponent<LayoutElement>();
             le.flexibleWidth = 1f;
-            le.preferredHeight = 40f;
-            le.minHeight = 40f;
+            le.preferredHeight = 38f;
+            le.minHeight = 38f;
 
             var inputBg = userInputField.GetComponent<Image>();
             if (inputBg != null) inputBg.color = BgInput;
 
             userInputField.textComponent.color   = TextPrimary;
-            userInputField.textComponent.fontSize = 15f;
+            userInputField.textComponent.fontSize = 14f;
 
             if (userInputField.placeholder != null)
             {
                 var ph = userInputField.placeholder.GetComponent<TMP_Text>();
                 if (ph != null)
                 {
-                    ph.text     = "Type a message... (M = mic, C = toggle chat)";
-                    ph.fontSize = 13f;
+                    ph.text     = "Say something...";
+                    ph.fontSize = 14f;
                     ph.color    = TextMuted;
+                    ph.fontStyle = FontStyles.Italic;
                 }
             }
             // Enter key submits the message
@@ -320,16 +324,17 @@ public class CompanionController : MonoBehaviour
             GameObject micBtn = new GameObject("MicButton");
             micBtn.transform.SetParent(chatPanel.transform, false);
             micButtonImage = micBtn.AddComponent<Image>();
-            micButtonImage.color = BgInput;
+            micButtonImage.color = new Color(0f, 0f, 0f, 0f);
             var micLE = micBtn.AddComponent<LayoutElement>();
-            micLE.minWidth = 40f; micLE.preferredWidth = 40f;
-            micLE.minHeight = 40f; micLE.preferredHeight = 40f;
+            micLE.minWidth = 38f; micLE.preferredWidth = 38f;
+            micLE.minHeight = 38f; micLE.preferredHeight = 38f;
             micLE.flexibleWidth = 0f;
             var micBtnComp = micBtn.AddComponent<Button>();
             var micCols = micBtnComp.colors;
-            micCols.normalColor      = BgInput;
-            micCols.highlightedColor = new Color(0.20f, 0.20f, 0.30f, 1f);
-            micCols.pressedColor     = new Color(0.55f, 0.10f, 0.10f, 1f);
+            micCols.normalColor      = new Color(0f, 0f, 0f, 0f);
+            micCols.highlightedColor = new Color(1f, 1f, 1f, 0.06f);
+            micCols.pressedColor     = new Color(1f, 1f, 1f, 0.12f);
+            micCols.fadeDuration     = 0.08f;
             micBtnComp.colors = micCols;
             micBtnComp.onClick.AddListener(() => {
                 var vim = GetComponent<VoiceInputManager>();
@@ -341,8 +346,8 @@ public class CompanionController : MonoBehaviour
             micIconRect.anchorMin = Vector2.zero; micIconRect.anchorMax = Vector2.one;
             micIconRect.sizeDelta = Vector2.zero; micIconRect.offsetMin = Vector2.zero; micIconRect.offsetMax = Vector2.zero;
             var micIcon = micIconObj.AddComponent<TextMeshProUGUI>();
-            micIcon.text = "MIC"; micIcon.fontSize = 11f;
-            micIcon.color = TextMuted;
+            micIcon.text = "⏺"; micIcon.fontSize = 16f;
+            micIcon.color = new Color(0.46f, 0.48f, 0.60f, 1f);
             micIcon.alignment = TextAlignmentOptions.Center;
             micIcon.enableWordWrapping = false;
             micLabel = micIcon; // saved for dynamic label updates
@@ -359,32 +364,33 @@ public class CompanionController : MonoBehaviour
 
             var swRect = switchButton.GetComponent<RectTransform>();
             var le = swRect.GetComponent<LayoutElement>() ?? swRect.gameObject.AddComponent<LayoutElement>();
-            le.minWidth       = 36f;
-            le.preferredWidth = 36f;
-            le.preferredHeight = 36f;
-            le.minHeight      = 36f;
+            le.minWidth       = 38f;
+            le.preferredWidth = 38f;
+            le.preferredHeight = 38f;
+            le.minHeight      = 38f;
             le.flexibleWidth  = 0f;
 
             var swBg = switchButton.GetComponent<Image>();
-            if (swBg != null) swBg.color = BgInput;
+            if (swBg != null) swBg.color = new Color(0f, 0f, 0f, 0f);
 
             var swBtn = switchButton.GetComponent<Button>();
             if (swBtn != null)
             {
                 var cols = swBtn.colors;
-                cols.normalColor      = BgInput;
-                cols.highlightedColor = new Color(0.20f, 0.20f, 0.30f, 1f);
-                cols.pressedColor     = AccentDim;
+                cols.normalColor      = new Color(0f, 0f, 0f, 0f);
+                cols.highlightedColor = new Color(1f, 1f, 1f, 0.06f);
+                cols.pressedColor     = new Color(1f, 1f, 1f, 0.12f);
+                cols.fadeDuration     = 0.08f;
                 swBtn.colors = cols;
             }
 
             var swLabel = switchButton.GetComponentInChildren<TMP_Text>();
             if (swLabel != null)
             {
-                swLabel.text      = "NEXT";
-                swLabel.color     = TextMuted;
-                swLabel.fontSize  = 11f;
-                swLabel.fontStyle = FontStyles.Bold;
+                swLabel.text      = "⟳";
+                swLabel.color     = new Color(0.46f, 0.48f, 0.60f, 1f);
+                swLabel.fontSize  = 18f;
+                swLabel.fontStyle = FontStyles.Normal;
                 swLabel.alignment = TextAlignmentOptions.Center;
             }
         }
@@ -392,8 +398,8 @@ public class CompanionController : MonoBehaviour
         // Style character name (top-left of panel, outside layout)
         if (characterNameText != null)
         {
-            characterNameText.color    = new Color(0.72f, 0.74f, 0.95f, 1f); // soft accent, more visible
-            characterNameText.fontSize = 12f;
+            characterNameText.color     = new Color(0.55f, 0.65f, 0.95f, 0.80f);
+            characterNameText.fontSize  = 10f;
             characterNameText.fontStyle = FontStyles.Bold;
 
             var nameRect = characterNameText.GetComponent<RectTransform>();
@@ -403,8 +409,8 @@ public class CompanionController : MonoBehaviour
                 nameRect.anchorMin = new Vector2(0f, 1f);
                 nameRect.anchorMax = new Vector2(0f, 1f);
                 nameRect.pivot     = new Vector2(0f, 0f);
-                nameRect.anchoredPosition = new Vector2(14f, 4f);
-                nameRect.sizeDelta = new Vector2(160f, 16f);
+                nameRect.anchoredPosition = new Vector2(12f, 3f);
+                nameRect.sizeDelta = new Vector2(140f, 14f);
             }
         }
     }
@@ -421,8 +427,8 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin = new Vector2(1f, 0f);
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
-        rect.anchoredPosition = new Vector2(-14f, 14f);
-        rect.sizeDelta = new Vector2(46f, 46f);
+        rect.anchoredPosition = new Vector2(-12f, 12f);
+        rect.sizeDelta = new Vector2(52f, 36f);
 
         var bg = toggleButton.AddComponent<Image>();
         bg.color = AccentColor;
@@ -430,8 +436,9 @@ public class CompanionController : MonoBehaviour
         var btn = toggleButton.AddComponent<Button>();
         var cols = btn.colors;
         cols.normalColor      = AccentColor;
-        cols.highlightedColor = new Color(0.50f, 0.51f, 1.00f, 1f);
+        cols.highlightedColor = AccentHover;
         cols.pressedColor     = AccentDim;
+        cols.fadeDuration     = 0.08f;
         btn.colors = cols;
         btn.onClick.AddListener(OnToggleChat);
 
@@ -446,7 +453,7 @@ public class CompanionController : MonoBehaviour
 
         var icon = iconObj.AddComponent<TextMeshProUGUI>();
         icon.text      = "Chat";
-        icon.fontSize  = 13f;
+        icon.fontSize  = 12f;
         icon.fontStyle = FontStyles.Bold;
         icon.alignment = TextAlignmentOptions.Center;
         icon.enableWordWrapping = false;
@@ -521,10 +528,10 @@ public class CompanionController : MonoBehaviour
     public void SetMicActiveLabel(bool recording)
     {
         if (micLabel == null) return;
-        micLabel.text  = recording ? "REC" : "MIC";
+        micLabel.text  = recording ? "⏹" : "⏺";  // stop vs record icon
         micLabel.color = recording
-            ? new Color(1.00f, 0.40f, 0.40f, 1f)  // bright red while recording
-            : TextMuted;
+            ? new Color(0.95f, 0.35f, 0.35f, 1f)  // red while recording
+            : new Color(0.46f, 0.48f, 0.60f, 1f);
     }
 
     /// <summary>
@@ -542,11 +549,11 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin        = new Vector2(0f, 0f);
         rect.anchorMax        = new Vector2(1f, 0f);
         rect.pivot            = new Vector2(0.5f, 0f);
-        rect.anchoredPosition = new Vector2(0f, 64f); // just above the 64px chat bar
-        rect.sizeDelta        = new Vector2(0f, 20f);
+        rect.anchoredPosition = new Vector2(0f, 56f); // just above the 56px chat bar
+        rect.sizeDelta        = new Vector2(0f, 16f);
 
         var bg = hintsBar.AddComponent<Image>();
-        bg.color = new Color(0.04f, 0.04f, 0.07f, 0.80f);
+        bg.color = new Color(0.05f, 0.05f, 0.07f, 0.70f);
 
         var textObj  = new GameObject("HintText");
         textObj.transform.SetParent(hintsBar.transform, false);
@@ -558,9 +565,9 @@ public class CompanionController : MonoBehaviour
         textRect.offsetMax = new Vector2(-8f, 0f);
 
         var hint = textObj.AddComponent<TextMeshProUGUI>();
-        hint.text               = "Enter = Send  |  M = Mic  |  C = Toggle Chat  |  Scroll = Resize  |  Drag = Move  |  ESC = Quit";
-        hint.fontSize           = 9.5f;
-        hint.color              = new Color(0.45f, 0.47f, 0.60f, 0.80f);
+        hint.text               = "Enter = Send  ·  M = Mic  ·  C = Chat  ·  Scroll = Resize  ·  Drag = Move  ·  ESC = Quit";
+        hint.fontSize           = 8.5f;
+        hint.color              = new Color(0.36f, 0.38f, 0.50f, 0.70f);
         hint.alignment          = TextAlignmentOptions.Center;
         hint.enableWordWrapping = false;
 
