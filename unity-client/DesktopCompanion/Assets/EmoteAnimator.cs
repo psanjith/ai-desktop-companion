@@ -1196,18 +1196,17 @@ public class EmoteAnimator : MonoBehaviour
 
             // CONFIRMED bone axes (from diagnostic):
             //   UpperArm +X → DOWN   ∴ -X raises the arm UP
-            //   UpperArm +Y → LEFT   ∴ -Y pulls the arm FORWARD (in front of body)
+            //   UpperArm +Y → LEFT   ∴ 0 Y keeps elbow pointing out to the side (natural wave)
             //   UpperArm +Z → BACK   ∴ roll axis — not used
             //
-            // Goal: elbow bent upward, forearm vertical, palm facing viewer.
-            //   Upper arm: -90 X (straight up) -30 Y (swing forward so elbow is in front, not to side)
-            Quaternion armRaised = armRest * Quaternion.Euler(-90f, -30f, 0f);
+            // Goal: arm raised to side, elbow bent OUTWARD, forearm up, palm facing viewer.
+            //   Upper arm: -90 X (straight up), 0 Y (arm stays out to the side, not pulled inward)
+            Quaternion armRaised = armRest * Quaternion.Euler(-90f, 0f, 0f);
 
-            // LowerArm +X → DOWN (same direction as upper arm at rest).
-            // At the raised position the local frame has rotated, so -X on lower arm
-            // bends the elbow so the forearm points further UP / forward.
-            // +80 X opens the elbow so the forearm is roughly vertical (bent ~90° at elbow).
-            Quaternion lowerBent = lowerRest * Quaternion.Euler(80f, 0f, 0f);
+            // LowerArm +X → DOWN (same as upper arm).
+            // -80 X bends the elbow OUTWARD (away from body).
+            // +80 X was bending it inward — flip the sign to go the other way.
+            Quaternion lowerBent = lowerRest * Quaternion.Euler(-80f, 0f, 0f);
 
             Quaternion headTilt  = headRest  * Quaternion.Euler(0f, -12f, 0f); // look toward raised arm
             Quaternion spineLean = spineRest * Quaternion.Euler(0f,  0f, -3f);
