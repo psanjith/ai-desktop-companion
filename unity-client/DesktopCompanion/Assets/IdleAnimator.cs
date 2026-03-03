@@ -9,37 +9,37 @@ using UnityEngine;
 public class IdleAnimator : MonoBehaviour
 {
     [Header("Bobbing (up/down)")]
-    public float bobAmount = 0.02f;
-    public float bobSpeed = 0.65f;
+    public float bobAmount = 0.012f;
+    public float bobSpeed = 0.55f;
 
     [Header("Breathing (chest scale pulse)")]
-    public float breatheAmount = 0.004f;
-    public float breatheSpeed = 0.9f;
+    public float breatheAmount = 0.003f;
+    public float breatheSpeed = 0.75f;
 
     [Header("Body Sway")]
-    public float swayAmount = 2f;
-    public float swaySpeed = 0.3f;
+    public float swayAmount = 1.2f;
+    public float swaySpeed = 0.25f;
 
     [Header("Weight Shift (hips)")]
-    public float weightShiftAmount = 1.5f;
-    public float weightShiftSpeed = 0.18f;
+    public float weightShiftAmount = 0.9f;
+    public float weightShiftSpeed = 0.15f;
 
     [Header("Head Movement")]
-    public float headTiltAmount = 3.5f;
-    public float headTiltSpeed = 0.17f;
-    public float headTurnAmount = 5f;
-    public float headTurnSpeed = 0.11f;
+    public float headTiltAmount = 2.0f;
+    public float headTiltSpeed = 0.14f;
+    public float headTurnAmount = 3.0f;
+    public float headTurnSpeed = 0.09f;
 
     [Header("Arm Micro-Movement")]
-    public float armSwayAmount = 1.5f;
-    public float armSwaySpeed = 0.35f;
+    public float armSwayAmount = 0.8f;
+    public float armSwaySpeed = 0.28f;
 
     [Header("Elbow Movement")]
-    public float elbowFlexAmount = 3f;
-    public float elbowFlexSpeed = 0.25f;
+    public float elbowFlexAmount = 1.5f;
+    public float elbowFlexSpeed = 0.20f;
 
     [Header("Smoothing")]
-    public float boneSmoothing = 8f; // how fast bones chase their target (higher = snappier)
+    public float boneSmoothing = 5f; // how fast bones chase their target (higher = snappier)
 
     private Vector3 startPos;
     private float baseScale = 1f;
