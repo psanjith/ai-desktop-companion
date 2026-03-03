@@ -106,8 +106,8 @@ public class EmoteAnimator : MonoBehaviour
             while (isPlaying) yield return null;
 
             // Wait until we have enough new text to analyze
-            // (at least ~65 chars since last gesture = ~13 words)
-            while (currentStreamText.Length - lastGestureTextPos < 65)
+            // (at least ~80 chars since last gesture = ~16 words)
+            while (currentStreamText.Length - lastGestureTextPos < 80)
             {
                 if (isPlaying) break;
                 yield return null;
@@ -117,8 +117,8 @@ public class EmoteAnimator : MonoBehaviour
             // Play a contextually relevant gesture based on recent text
             yield return PlayContextualGesture();
 
-            // Relaxed pause between gestures (5.0 - 9.0s) for calm rhythm
-            float wait = Random.Range(5.0f, 9.0f);
+            // Relaxed pause between gestures (7.0 - 12.0s) for unhurried natural rhythm
+            float wait = Random.Range(7.0f, 12.0f);
             float elapsed = 0f;
             while (elapsed < wait)
             {

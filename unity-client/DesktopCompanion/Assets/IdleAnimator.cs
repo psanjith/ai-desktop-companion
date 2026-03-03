@@ -210,9 +210,10 @@ public class IdleAnimator : MonoBehaviour
         float hipsSmooth  = smooth * 0.55f;  // hips are heavy, shift slowly
         float armSmooth   = smooth * 1.05f;
 
-        // Stillness mask: very slow Perlin drift in [0.55 .. 1.0]
-        // Character naturally quiets down and livens up rather than oscillating perfectly
-        float stillness = 0.55f + Mathf.PerlinNoise(boneSeeds[11] + t * 0.04f, 0.3f) * 0.45f;
+        // Stillness mask: very slow Perlin drift in [0.20 .. 0.88]
+        // Lower floor means the character genuinely settles to near-motionless periodically,
+        // like a real person who isn't constantly fidgeting.
+        float stillness = 0.20f + Mathf.PerlinNoise(boneSeeds[11] + t * 0.035f, 0.3f) * 0.68f;
 
         // Breath phase — reuse the same signal driving chest scale for spine coupling
         float breathPhase = Organic(t, breatheSpeed, 1f, boneSeeds[1]);
@@ -253,8 +254,8 @@ public class IdleAnimator : MonoBehaviour
         // ---- Arms: asymmetric sway (left and right feel independent) ----
         if (leftUpperArm != null)
         {
-            float sw  = Organic(t, armSwaySpeed * _curSpeedMult, armSwayAmount * _curAmpMult, boneSeeds[5]);
-            float sw2 = Organic2(t, armSwaySpeed * 0.7f * _curSpeedMult, armSwayAmount * 0.25f * _curAmpMult, boneSeeds[5]);
+            float sw  = Organic(t, armSwaySpeed * _curSpeedMult, armSwayAmount * stillness * _curAmpMult, boneSeeds[5]);
+            float sw2 = Organic2(t, armSwaySpeed * 0.7f * _curSpeedMult, armSwayAmount * 0.25f * stillness * _curAmpMult, boneSeeds[5]);
             Quaternion target = leftArmRest * Quaternion.Euler(sw, sw2 * 0.3f, sw * 0.25f);
             leftUpperArm.localRotation = ChaseTarget(leftUpperArm.localRotation, target, armSmooth);
         }
@@ -262,7 +263,7 @@ public class IdleAnimator : MonoBehaviour
         {
             // Slightly different speed multiplier for natural asymmetry
             float sw  = Organic(t, armSwaySpeed * 1.07f * _curSpeedMult, armSwayAmount * _curAmpMult, boneSeeds[6]);
-            float sw2 = Organic2(t, armSwaySpeed * 0.8f * _curSpeedMult, armSwayAmount * 0.25f * _curAmpMult, boneSeeds[6]);
+            float sw2 = Organic2(t, armSwaySpeed * 0.8f * _curSpeedMult, armSwayAmount * 0.25f * stillness * _curAmpMult, boneSeeds[6]);
             Quaternion target = rightArmRest * Quaternion.Euler(sw, -sw2 * 0.3f, -sw * 0.25f);
             rightUpperArm.localRotation = ChaseTarget(rightUpperArm.localRotation, target, armSmooth);
         }
@@ -270,15 +271,15 @@ public class IdleAnimator : MonoBehaviour
         // ---- Lower arms: organic flex with twist ----
         if (leftLowerArm != null)
         {
-            float flex  = Organic(t, elbowFlexSpeed * _curSpeedMult, elbowFlexAmount * _curAmpMult, boneSeeds[7]);
-            float twist = Organic2(t, elbowFlexSpeed * 0.6f * _curSpeedMult, elbowFlexAmount * 0.25f * _curAmpMult, boneSeeds[7]);
+            float flex  = Organic(t, elbowFlexSpeed * _curSpeedMult, elbowFlexAmount * stillness * _curAmpMult, boneSeeds[7]);
+            float twist = Organic2(t, elbowFlexSpeed * 0.6f * _curSpeedMult, elbowFlexAmount * 0.25f * stillness * _curAmpMult, boneSeeds[7]);
             Quaternion target = leftLowerArmRest * Quaternion.Euler(flex, twist, 0f);
             leftLowerArm.localRotation = ChaseTarget(leftLowerArm.localRotation, target, armSmooth);
         }
         if (rightLowerArm != null)
         {
-            float flex  = Organic(t, elbowFlexSpeed * 1.05f * _curSpeedMult, elbowFlexAmount * _curAmpMult, boneSeeds[8]);
-            float twist = Organic2(t, elbowFlexSpeed * 0.65f * _curSpeedMult, elbowFlexAmount * 0.25f * _curAmpMult, boneSeeds[8]);
+            float flex  = Organic(t, elbowFlexSpeed * 1.05f * _curSpeedMult, elbowFlexAmount * stillness * _curAmpMult, boneSeeds[8]);
+            float twist = Organic2(t, elbowFlexSpeed * 0.65f * _curSpeedMult, elbowFlexAmount * 0.25f * stillness * _curAmpMult, boneSeeds[8]);
             Quaternion target = rightLowerArmRest * Quaternion.Euler(flex, twist, 0f);
             rightLowerArm.localRotation = ChaseTarget(rightLowerArm.localRotation, target, armSmooth);
         }
@@ -286,15 +287,15 @@ public class IdleAnimator : MonoBehaviour
         // ---- Hands: subtle organic fidget on multiple axes ----
         if (leftHand != null)
         {
-            float fx = Organic(t, 0.7f * _curSpeedMult, 0.7f * _curAmpMult, boneSeeds[9]);
-            float fy = Organic2(t, 0.5f * _curSpeedMult, 0.5f * _curAmpMult, boneSeeds[9]);
+            float fx = Organic(t, 0.7f * _curSpeedMult, 0.7f * stillness * _curAmpMult, boneSeeds[9]);
+            float fy = Organic2(t, 0.5f * _curSpeedMult, 0.5f * stillness * _curAmpMult, boneSeeds[9]);
             Quaternion target = leftHandRest * Quaternion.Euler(fx, fy, 0f);
             leftHand.localRotation = ChaseTarget(leftHand.localRotation, target, smooth);
         }
         if (rightHand != null)
         {
-            float fx = Organic(t, 0.65f * _curSpeedMult, 0.7f * _curAmpMult, boneSeeds[10]);
-            float fy = Organic2(t, 0.55f * _curSpeedMult, 0.5f * _curAmpMult, boneSeeds[10]);
+            float fx = Organic(t, 0.65f * _curSpeedMult, 0.7f * stillness * _curAmpMult, boneSeeds[10]);
+            float fy = Organic2(t, 0.55f * _curSpeedMult, 0.5f * stillness * _curAmpMult, boneSeeds[10]);
             Quaternion target = rightHandRest * Quaternion.Euler(fx, -fy, 0f);
             rightHand.localRotation = ChaseTarget(rightHand.localRotation, target, smooth);
         }
