@@ -412,9 +412,9 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion rest = head.localRotation;
         float dir = Random.value > 0.5f ? 1f : -1f;
         Quaternion tilted = rest * Quaternion.Euler(0f, 0f, VaryAngle(18f) * dir);
-        yield return RotateBoneOverTime(head, rest, tilted, Vary(0.5f));
-        yield return new WaitForSeconds(Vary(0.5f));
-        yield return RotateBoneOverTime(head, tilted, rest, Vary(0.5f));
+        yield return RotateBoneOverTime(head, rest, tilted, Vary(0.45f), EaseInOutBack);
+        yield return new WaitForSeconds(Vary(0.45f));
+        yield return RotateBoneOverTime(head, tilted, rest, Vary(0.4f), SmootherStep);
     }
 
     IEnumerator GestureHandRaise()
@@ -435,15 +435,15 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion hTilt = hRest * Quaternion.Euler(0f, 0f, VaryAngle(15f) * side);
 
         // Raise: arm leads, elbow cascades, hand follows
-        float dur = Vary(0.5f);
-        StartCoroutine(RotateBoneOverTime(arm, aRest, aUp, dur));
+        float dur = Vary(0.45f);
+        StartCoroutine(RotateBoneOverTime(arm, aRest, aUp, dur, EaseOutBack));
         if (lower != null) StartCoroutine(RotateBoneDelayed(lower, lRest, lBent, dur * 0.9f, Vary(0.08f)));
         if (hand != null) StartCoroutine(RotateBoneDelayed(hand, hRest, hTilt, dur * 0.8f, Vary(0.12f)));
         yield return new WaitForSeconds(dur + 0.05f);
-        yield return new WaitForSeconds(Vary(0.5f));
+        yield return new WaitForSeconds(Vary(0.45f));
         // Return
-        dur = Vary(0.5f);
-        StartCoroutine(RotateBoneOverTime(arm, aUp, aRest, dur));
+        dur = Vary(0.45f);
+        StartCoroutine(RotateBoneOverTime(arm, aUp, aRest, dur, SmootherStep));
         if (lower != null) StartCoroutine(RotateBoneDelayed(lower, lBent, lRest, dur * 0.9f, Vary(0.08f)));
         if (hand != null) StartCoroutine(RotateBoneDelayed(hand, hTilt, hRest, dur * 0.8f, Vary(0.12f)));
         yield return new WaitForSeconds(dur + 0.05f);
@@ -467,8 +467,8 @@ public class EmoteAnimator : MonoBehaviour
             float nodDepth = VaryAngle(15f);
             float nodSpeed = Vary(0.22f);
             Quaternion down = hRest * Quaternion.Euler(nodDepth, 0f, 0f);
-            yield return RotateBoneOverTime(head, hRest, down, nodSpeed);
-            yield return RotateBoneOverTime(head, down, hRest, nodSpeed * Vary(1f));
+            yield return RotateBoneOverTime(head, hRest, down, nodSpeed, EaseInOutBack);
+            yield return RotateBoneOverTime(head, down, hRest, nodSpeed * Vary(0.9f), SmootherStep);
         }
 
         // Lean spine back out smoothly
@@ -487,14 +487,14 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion hUp = hRest * Quaternion.Euler(VaryAngle(-8f), 0f, 0f);
 
         // Lean in: spine leads, head follows slightly after
-        float dur = Vary(0.5f);
-        StartCoroutine(RotateBoneOverTime(spine, sRest, sLean, dur));
+        float dur = Vary(0.45f);
+        StartCoroutine(RotateBoneOverTime(spine, sRest, sLean, dur, EaseInOutBack));
         if (head != null) StartCoroutine(RotateBoneDelayed(head, hRest, hUp, dur * 0.8f, Vary(0.1f)));
         yield return new WaitForSeconds(dur + 0.05f);
         yield return new WaitForSeconds(Vary(0.5f));
         // Return together
-        dur = Vary(0.5f);
-        StartCoroutine(RotateBoneOverTime(spine, sLean, sRest, dur));
+        dur = Vary(0.45f);
+        StartCoroutine(RotateBoneOverTime(spine, sLean, sRest, dur, SmootherStep));
         if (head != null) StartCoroutine(RotateBoneDelayed(head, hUp, hRest, dur * 0.8f, Vary(0.1f)));
         yield return new WaitForSeconds(dur + 0.05f);
     }
@@ -517,15 +517,15 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion hFlat = hRest * Quaternion.Euler(VaryAngle(-25f), 0f, 0f);
 
         // Extend: arm leads, elbow and hand cascade
-        float dur = Vary(0.5f);
-        StartCoroutine(RotateBoneOverTime(arm, aRest, aOut, dur));
+        float dur = Vary(0.42f);
+        StartCoroutine(RotateBoneOverTime(arm, aRest, aOut, dur, EaseOutBack));
         if (lower != null) StartCoroutine(RotateBoneDelayed(lower, lRest, lStraight, dur * 0.84f, Vary(0.08f)));
         if (hand != null) StartCoroutine(RotateBoneDelayed(hand, hRest, hFlat, dur * 0.76f, Vary(0.12f)));
         yield return new WaitForSeconds(dur + 0.05f);
-        yield return new WaitForSeconds(Vary(0.55f));
+        yield return new WaitForSeconds(Vary(0.5f));
         // Return together
-        dur = Vary(0.5f);
-        StartCoroutine(RotateBoneOverTime(arm, aOut, aRest, dur));
+        dur = Vary(0.42f);
+        StartCoroutine(RotateBoneOverTime(arm, aOut, aRest, dur, SmootherStep));
         if (lower != null) StartCoroutine(RotateBoneDelayed(lower, lStraight, lRest, dur * 0.84f, Vary(0.08f)));
         if (hand != null) StartCoroutine(RotateBoneDelayed(hand, hFlat, hRest, dur * 0.76f, Vary(0.12f)));
         yield return new WaitForSeconds(dur + 0.05f);
@@ -732,14 +732,14 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion lPoint = lRest  * Quaternion.Euler(VaryAngle(-30f), 0f, 0f);
         Quaternion hPoint = hRest  * Quaternion.Euler(VaryAngle(-15f), 0f, 0f);
 
-        float dur = Vary(0.4f);
-        StartCoroutine(RotateBoneOverTime(arm, aRest, aPoint, dur));
+        float dur = Vary(0.38f);
+        StartCoroutine(RotateBoneOverTime(arm, aRest, aPoint, dur, EaseOutBack));
         if (lower != null) StartCoroutine(RotateBoneDelayed(lower, lRest, lPoint, dur * 0.85f, Vary(0.07f)));
         if (hand  != null) StartCoroutine(RotateBoneDelayed(hand,  hRest, hPoint, dur * 0.75f, Vary(0.1f)));
         yield return new WaitForSeconds(dur + 0.05f);
-        yield return new WaitForSeconds(Vary(0.5f));
-        dur = Vary(0.45f);
-        StartCoroutine(RotateBoneOverTime(arm, aPoint, aRest, dur));
+        yield return new WaitForSeconds(Vary(0.45f));
+        dur = Vary(0.4f);
+        StartCoroutine(RotateBoneOverTime(arm, aPoint, aRest, dur, SmootherStep));
         if (lower != null) StartCoroutine(RotateBoneDelayed(lower, lPoint, lRest, dur * 0.85f, Vary(0.07f)));
         if (hand  != null) StartCoroutine(RotateBoneDelayed(hand,  hPoint, hRest, dur * 0.75f, Vary(0.1f)));
         yield return new WaitForSeconds(dur + 0.05f);
@@ -757,9 +757,9 @@ public class EmoteAnimator : MonoBehaviour
             float depth = VaryAngle(12f);
             float spd   = Vary(0.14f);
             Quaternion down = rest * Quaternion.Euler(depth, 0f, 0f);
-            yield return RotateBoneOverTime(head, rest, down, spd);
-            yield return RotateBoneOverTime(head, down, rest, spd * Vary(1f));
-            yield return new WaitForSeconds(Vary(0.08f));
+            yield return RotateBoneOverTime(head, rest, down, spd, EaseInOutBack);
+            yield return RotateBoneOverTime(head, down, rest, spd * Vary(0.88f), SmootherStep);
+            yield return new WaitForSeconds(Vary(0.06f));
         }
     }
 
@@ -1142,26 +1142,32 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion aRest = rightArm != null ? rightArm.localRotation : Quaternion.identity;
             Quaternion lRest = rightLower != null ? rightLower.localRotation : Quaternion.identity;
 
-            // Lean forward slightly while nodding + small hand gesture
-            Quaternion sLean = sRest * Quaternion.Euler(8f, 0f, 0f);
-            Quaternion aGesture = aRest * Quaternion.Euler(-20f, 0f, -12f);
-            Quaternion lBend = lRest * Quaternion.Euler(-30f, 0f, 0f);
+            // Lean forward + small hand gesture — all staggered so they arrive together
+            Quaternion sLean    = sRest * Quaternion.Euler(Vary(8f), 0f, 0f);
+            Quaternion aGesture = aRest * Quaternion.Euler(VaryAngle(-20f), 0f, VaryAngle(-12f));
+            Quaternion lBend    = lRest * Quaternion.Euler(VaryAngle(-30f), 0f, 0f);
 
-            if (spine != null) spine.localRotation = sLean;
-            if (rightArm != null) rightArm.localRotation = aGesture;
-            if (rightLower != null) rightLower.localRotation = lBend;
+            float prepDur = Vary(0.2f);
+            if (spine     != null) StartCoroutine(RotateBoneOverTime(spine,      sRest,  sLean,    prepDur,        SmootherStep));
+            if (rightArm  != null) StartCoroutine(RotateBoneDelayed(rightArm,  aRest,  aGesture, prepDur * 0.9f, 0.03f));
+            if (rightLower!= null) StartCoroutine(RotateBoneDelayed(rightLower, lRest,  lBend,    prepDur * 0.8f, 0.06f));
+            yield return new WaitForSeconds(prepDur);
 
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i < 2; i++)
             {
-                Quaternion down = hRest * Quaternion.Euler(25f, 0f, 0f);
-                yield return RotateBoneOverTime(head, head.localRotation, down, 0.12f);
-                yield return RotateBoneOverTime(head, down, hRest, 0.12f);
+                float nodDepth = VaryAngle(22f);
+                float nodSpd   = Vary(0.13f);
+                Quaternion down = hRest * Quaternion.Euler(nodDepth, 0f, 0f);
+                yield return RotateBoneOverTime(head, hRest, down, nodSpd,          EaseInOutBack);
+                yield return RotateBoneOverTime(head, down,  hRest, nodSpd * 0.85f, EaseInOutBack);
             }
 
-            // Return all
-            if (spine != null) yield return RotateBoneOverTime(spine, sLean, sRest, 0.2f);
-            if (rightArm != null) yield return RotateBoneOverTime(rightArm, aGesture, aRest, 0.15f);
-            if (rightLower != null) rightLower.localRotation = lRest;
+            // Return all in parallel
+            float retDur = Vary(0.22f);
+            if (spine     != null) StartCoroutine(RotateBoneOverTime(spine,      sLean,    sRest,  retDur,        SmootherStep));
+            if (rightArm  != null) StartCoroutine(RotateBoneDelayed(rightArm,  aGesture, aRest,  retDur * 0.9f, 0.02f));
+            if (rightLower!= null) StartCoroutine(RotateBoneDelayed(rightLower, lBend,    lRest,  retDur * 0.8f, 0.04f));
+            yield return new WaitForSeconds(retDur);
         }
         else
         {
@@ -1360,24 +1366,27 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion lhDangle = lhRest * Quaternion.Euler(20f, 0f, 0f);
         Quaternion rhDangle = rhRest * Quaternion.Euler(20f, 0f, 0f);
 
-        // Sink down + deflate scale + all bones slump smoothly
-        float shrink = 0.88f;
-        yield return ScaleOverTime(originalScale * shrink, 0.4f);
-        if (spine != null) yield return RotateBoneOverTime(spine, sRest, sCurl, 0.3f);
-        if (chest != null) yield return RotateBoneOverTime(chest, cRest, cCave, 0.15f);
-        if (head != null) yield return RotateBoneOverTime(head, hRest, hDrop, 0.25f);
-        if (leftArm != null) yield return RotateBoneOverTime(leftArm, lRest, lDroop, 0.15f);
-        if (rightArm != null) yield return RotateBoneOverTime(rightArm, rRest, rDroop, 0.12f);
+        // Sink: everything slumps together with staggered cascade — head last (it droops)
+        float slumpDur = Vary(0.4f);
+        StartCoroutine(ScaleOverTime(originalScale * 0.88f, slumpDur));
+        if (spine    != null) StartCoroutine(RotateBoneOverTime(spine,    sRest,  sCurl,   slumpDur,         SmootherStep));
+        if (chest    != null) StartCoroutine(RotateBoneDelayed(chest,    cRest,  cCave,   slumpDur * 0.85f, 0.05f));
+        if (leftArm  != null) StartCoroutine(RotateBoneDelayed(leftArm,  lRest,  lDroop,  slumpDur * 0.78f, 0.07f));
+        if (rightArm != null) StartCoroutine(RotateBoneDelayed(rightArm, rRest,  rDroop,  slumpDur * 0.78f, 0.09f));
+        if (head     != null) StartCoroutine(RotateBoneDelayed(head,     hRest,  hDrop,   slumpDur * 0.7f,  0.12f));
+        yield return new WaitForSeconds(slumpDur);
 
-        yield return new WaitForSeconds(0.8f);
+        yield return new WaitForSeconds(Vary(0.75f));
 
-        // Recover smoothly
-        if (leftArm != null) yield return RotateBoneOverTime(leftArm, lDroop, lRest, 0.15f);
-        if (rightArm != null) yield return RotateBoneOverTime(rightArm, rDroop, rRest, 0.12f);
-        if (head != null) yield return RotateBoneOverTime(head, hDrop, hRest, 0.3f);
-        if (chest != null) yield return RotateBoneOverTime(chest, cCave, cRest, 0.15f);
-        if (spine != null) yield return RotateBoneOverTime(spine, sCurl, sRest, 0.3f);
-        yield return ScaleOverTime(originalScale, 0.4f);
+        // Recover — all in parallel, head leads the lift
+        float recoverDur = Vary(0.38f);
+        StartCoroutine(ScaleOverTime(originalScale, recoverDur));
+        if (head     != null) StartCoroutine(RotateBoneOverTime(head,     hDrop,  hRest,   recoverDur,         EaseOutBack));
+        if (leftArm  != null) StartCoroutine(RotateBoneDelayed(leftArm,  lDroop, lRest,   recoverDur * 0.88f, 0.03f));
+        if (rightArm != null) StartCoroutine(RotateBoneDelayed(rightArm, rDroop, rRest,   recoverDur * 0.88f, 0.04f));
+        if (chest    != null) StartCoroutine(RotateBoneDelayed(chest,    cCave,  cRest,   recoverDur * 0.78f, 0.06f));
+        if (spine    != null) StartCoroutine(RotateBoneDelayed(spine,    sCurl,  sRest,   recoverDur * 0.7f,  0.1f));
+        yield return new WaitForSeconds(recoverDur);
 
         ResetState();
     }
@@ -1405,19 +1414,22 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion sArch = sRest * Quaternion.Euler(-8f, 0f, 0f);
             Quaternion hBack = hRest * Quaternion.Euler(-10f, 0f, 0f);
 
-            // Raise arms smoothly
-            yield return RotateBoneOverTime(leftArm, lRest, lUp, 0.35f);
-            yield return RotateBoneOverTime(rightArm, rRest, rUp, 0.2f);
-            if (spine != null) yield return RotateBoneOverTime(spine, sRest, sArch, 0.2f);
-            if (head != null) yield return RotateBoneOverTime(head, hRest, hBack, 0.15f);
+            // Raise arms simultaneously — left leads by one frame, right follows, spine+head cascade
+            float stretchUp = Vary(0.38f);
+            StartCoroutine(RotateBoneOverTime(leftArm,  lRest,  lUp,   stretchUp,         EaseInOutBack));
+            StartCoroutine(RotateBoneDelayed(rightArm,  rRest,  rUp,   stretchUp * 0.94f, 0.02f));
+            if (spine != null) StartCoroutine(RotateBoneDelayed(spine, sRest, sArch, stretchUp * 0.75f, 0.07f));
+            if (head  != null) StartCoroutine(RotateBoneDelayed(head,  hRest, hBack, stretchUp * 0.65f, 0.1f));
+            yield return new WaitForSeconds(stretchUp);
 
-            yield return new WaitForSeconds(0.6f);
+            yield return new WaitForSeconds(Vary(0.55f));
 
-            // Lower back smoothly
-            if (head != null) yield return RotateBoneOverTime(head, hBack, hRest, 0.2f);
-            if (spine != null) yield return RotateBoneOverTime(spine, sArch, sRest, 0.2f);
-            yield return RotateBoneOverTime(rightArm, rUp, rRest, 0.2f);
-            yield return RotateBoneOverTime(leftArm, lUp, lRest, 0.35f);
+            // Lower back — all in parallel
+            float stretchDown = Vary(0.36f);
+            if (head  != null) StartCoroutine(RotateBoneOverTime(head,  hBack,  hRest,  stretchDown * 0.7f, SmootherStep));
+            if (spine != null) StartCoroutine(RotateBoneDelayed(spine,  sArch,  sRest,  stretchDown * 0.8f, 0.04f));
+            StartCoroutine(RotateBoneDelayed(rightArm, rUp,    rRest,  stretchDown * 0.94f, 0.02f));
+            yield return RotateBoneOverTime(leftArm, lUp, lRest, stretchDown, SmootherStep);
         }
         else
         {
@@ -1511,10 +1523,12 @@ public class EmoteAnimator : MonoBehaviour
         if (head != null)
         {
             Quaternion rest = head.localRotation;
-            Quaternion tilted = rest * Quaternion.Euler(5f, 0f, 22f);
-            yield return RotateBoneOverTime(head, rest, tilted, 0.3f);
-            yield return new WaitForSeconds(0.8f);
-            yield return RotateBoneOverTime(head, tilted, rest, 0.3f);
+            float tiltAmt = VaryAngle(22f);
+            float tiltDir = Random.value > 0.5f ? 1f : -1f;
+            Quaternion tilted = rest * Quaternion.Euler(VaryAngle(5f), 0f, tiltAmt * tiltDir);
+            yield return RotateBoneOverTime(head, rest, tilted, Vary(0.28f), EaseInOutBack);
+            yield return new WaitForSeconds(Vary(0.75f));
+            yield return RotateBoneOverTime(head, tilted, rest, Vary(0.28f), SmootherStep);
         }
         else
         {
@@ -1608,30 +1622,31 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion rlRest = rightLower != null ? rightLower.localRotation : Quaternion.identity;
 
             // Arms out + bent elbows (classic shrug pose)
-            Quaternion lOut = lRest * Quaternion.Euler(-30f, 0f, -15f);
-            Quaternion rOut = rRest * Quaternion.Euler(-30f, 0f, 15f);
-            Quaternion llBent = llRest * Quaternion.Euler(-50f, 0f, 0f);
-            Quaternion rlBent = rlRest * Quaternion.Euler(-50f, 0f, 0f);
-            Quaternion hTilt = hRest * Quaternion.Euler(0f, 0f, 10f);
+            Quaternion lOut  = lRest  * Quaternion.Euler(VaryAngle(-30f), 0f, VaryAngle(-15f));
+            Quaternion rOut  = rRest  * Quaternion.Euler(VaryAngle(-30f), 0f, VaryAngle( 15f));
+            Quaternion llBent = llRest * Quaternion.Euler(VaryAngle(-50f), 0f, 0f);
+            Quaternion rlBent = rlRest * Quaternion.Euler(VaryAngle(-50f), 0f, 0f);
+            Quaternion hTilt  = hRest  * Quaternion.Euler(0f, 0f, VaryAngle(10f));
 
-            // Raise to shrug
-            yield return RotateBoneOverTime(leftArm, lRest, lOut, 0.2f);
-            rightArm.localRotation = rOut;
-            if (leftLower != null) leftLower.localRotation = llBent;
-            if (rightLower != null) rightLower.localRotation = rlBent;
-            if (head != null) yield return RotateBoneOverTime(head, hRest, hTilt, 0.15f);
+            // Raise to shrug — all bones in parallel with EaseInOutBack weight
+            float raiseDur = Vary(0.22f);
+            StartCoroutine(RotateBoneOverTime(leftArm,  lRest,  lOut,   raiseDur,        EaseInOutBack));
+            StartCoroutine(RotateBoneDelayed(rightArm,  rRest,  rOut,   raiseDur * 0.96f, 0.02f));
+            if (leftLower  != null) StartCoroutine(RotateBoneDelayed(leftLower,  llRest, llBent, raiseDur * 0.85f, 0.05f));
+            if (rightLower != null) StartCoroutine(RotateBoneDelayed(rightLower, rlRest, rlBent, raiseDur * 0.85f, 0.06f));
+            if (head != null)       StartCoroutine(RotateBoneDelayed(head,       hRest,  hTilt,  raiseDur * 0.78f, 0.07f));
+            yield return MoveOverTime(Vector3.up, 0.04f, raiseDur);
 
-            // Small body lift
-            yield return MoveOverTime(Vector3.up, 0.04f, 0.1f);
-            yield return new WaitForSeconds(0.5f);
+            yield return new WaitForSeconds(Vary(0.45f));
 
-            // Lower back
-            yield return MoveOverTime(Vector3.up, -0.04f, 0.15f);
-            if (head != null) yield return RotateBoneOverTime(head, hTilt, hRest, 0.15f);
-            yield return RotateBoneOverTime(leftArm, lOut, lRest, 0.2f);
-            rightArm.localRotation = rRest;
-            if (leftLower != null) leftLower.localRotation = llRest;
-            if (rightLower != null) rightLower.localRotation = rlRest;
+            // Lower back — all parallel
+            float dropDur = Vary(0.24f);
+            StartCoroutine(MoveOverTime(Vector3.up, -0.04f, dropDur));
+            if (head       != null) StartCoroutine(RotateBoneOverTime(head,       hTilt,  hRest,  dropDur * 0.85f, SmootherStep));
+            if (leftLower  != null) StartCoroutine(RotateBoneDelayed(leftLower,  llBent, llRest, dropDur * 0.82f, 0.03f));
+            if (rightLower != null) StartCoroutine(RotateBoneDelayed(rightLower, rlBent, rlRest, dropDur * 0.82f, 0.04f));
+            StartCoroutine(RotateBoneDelayed(rightArm, rOut, rRest, dropDur * 0.96f, 0.02f));
+            yield return RotateBoneOverTime(leftArm, lOut, lRest, dropDur, SmootherStep);
         }
         else
         {
@@ -1655,11 +1670,13 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion rest = head.localRotation;
             for (int i = 0; i < 3; i++)
             {
-                Quaternion left = rest * Quaternion.Euler(0f, -22f, 0f);
-                Quaternion right = rest * Quaternion.Euler(0f, 22f, 0f);
-                yield return RotateBoneOverTime(head, head.localRotation, left, 0.1f);
-                yield return RotateBoneOverTime(head, left, right, 0.2f);
-                yield return RotateBoneOverTime(head, right, rest, 0.1f);
+                float amp = VaryAngle(22f);
+                float spd = Vary(0.11f);
+                Quaternion left  = rest * Quaternion.Euler(0f, -amp, 0f);
+                Quaternion right = rest * Quaternion.Euler(0f,  amp, 0f);
+                yield return RotateBoneOverTime(head, head.localRotation, left,  spd,        EaseInOutBack);
+                yield return RotateBoneOverTime(head, left,  right, spd * 2f,   EaseInOutBack);
+                yield return RotateBoneOverTime(head, right, rest,  spd,        SmootherStep);
             }
         }
         else
@@ -1944,20 +1961,19 @@ public class EmoteAnimator : MonoBehaviour
             if (leftLower != null) leftLower.localRotation = llBent;
             if (rightLower != null) rightLower.localRotation = rlBent;
 
-            // Clap cycles
+            // Clap cycles — fast lerp so each open/close has momentum rather than a hard snap
             for (int i = 0; i < 5; i++)
             {
-                // Open
-                leftArm.localRotation = lOpen;
-                rightArm.localRotation = rOpen;
-                yield return new WaitForSeconds(0.06f);
+                float clapSpd = Vary(0.05f);
+                // Open (arms apart)
+                StartCoroutine(RotateBoneOverTime(leftArm,  leftArm.localRotation,  lOpen,    clapSpd, EaseOutBack));
+                yield return    RotateBoneOverTime(rightArm, rightArm.localRotation, rOpen,    clapSpd, EaseOutBack);
                 // Close (clap!)
-                leftArm.localRotation = lForward;
-                rightArm.localRotation = rForward;
-                yield return new WaitForSeconds(0.06f);
-                // Tiny bounce with each clap
-                yield return MoveOverTime(Vector3.up, 0.04f, 0.03f);
-                yield return MoveOverTime(Vector3.up, -0.04f, 0.03f);
+                StartCoroutine(RotateBoneOverTime(leftArm,  lOpen,    lForward, clapSpd, EaseOutBack));
+                yield return    RotateBoneOverTime(rightArm, rOpen,    rForward, clapSpd, EaseOutBack);
+                // Tiny bounce impulse with each clap
+                StartCoroutine(MoveOverTime(Vector3.up,  0.035f, clapSpd * 0.6f));
+                yield return    MoveOverTime(Vector3.up, -0.035f, clapSpd * 0.6f);
             }
 
             // Lower arms back
@@ -2007,22 +2023,25 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion lFlinch = lRest * Quaternion.Euler(-25f, 0f, -20f);
             Quaternion rFlinch = rRest * Quaternion.Euler(-25f, 0f, 20f);
 
-            // Quick snap back
-            head.localRotation = hBack;
-            if (spine != null) spine.localRotation = sBack;
-            if (leftArm != null) leftArm.localRotation = lFlinch;
-            if (rightArm != null) rightArm.localRotation = rFlinch;
+            // Snap! Ultra-fast lerp = perceptually instant but avoids frame-one pop
+            float snapDur = 0.045f;
+            StartCoroutine(RotateBoneOverTime(head,     hRest, hBack,   snapDur, EaseOutBack));
+            if (spine    != null) StartCoroutine(RotateBoneOverTime(spine,    sRest, sBack,   snapDur, EaseOutBack));
+            if (leftArm  != null) StartCoroutine(RotateBoneOverTime(leftArm,  lRest, lFlinch, snapDur, EaseOutBack));
+            if (rightArm != null) StartCoroutine(RotateBoneOverTime(rightArm, rRest, rFlinch, snapDur, EaseOutBack));
 
             // Body jolts up
             yield return MoveOverTime(Vector3.up, 0.08f, 0.06f);
-            yield return new WaitForSeconds(0.5f);
+            yield return new WaitForSeconds(Vary(0.45f));
 
-            // Settle back smoothly
-            yield return MoveOverTime(Vector3.up, -0.08f, 0.25f);
-            yield return RotateBoneOverTime(head, hBack, hRest, 0.3f);
-            if (spine != null) yield return RotateBoneOverTime(spine, sBack, sRest, 0.2f);
-            if (leftArm != null) yield return RotateBoneOverTime(leftArm, lFlinch, lRest, 0.2f);
-            if (rightArm != null) rightArm.localRotation = rRest;
+            // Settle back — head + spine + arms all return simultaneously
+            float settleDur = Vary(0.3f);
+            StartCoroutine(MoveOverTime(Vector3.up, -0.08f, settleDur * 1.1f));
+            StartCoroutine(RotateBoneOverTime(head,    hBack,   hRest,  settleDur, SmootherStep));
+            if (spine    != null) StartCoroutine(RotateBoneDelayed(spine,    sBack,   sRest,  settleDur * 0.88f, 0.03f));
+            if (leftArm  != null) StartCoroutine(RotateBoneDelayed(leftArm,  lFlinch, lRest,  settleDur * 0.82f, 0.05f));
+            if (rightArm != null) StartCoroutine(RotateBoneDelayed(rightArm, rFlinch, rRest,  settleDur * 0.82f, 0.06f));
+            yield return new WaitForSeconds(settleDur);
         }
         else
         {
@@ -2284,20 +2303,24 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion rlBent = rlRest * Quaternion.Euler(-80f, 0f, 0f);
             Quaternion hTilt = hRest * Quaternion.Euler(0f, 0f, -6f);
 
-            yield return RotateBoneOverTime(leftArm, lRest, lCross, 0.3f);
-            yield return RotateBoneOverTime(rightArm, rRest, rCross, 0.2f);
-            if (leftLower != null) yield return RotateBoneOverTime(leftLower, llRest, llBent, 0.15f);
-            if (rightLower != null) yield return RotateBoneOverTime(rightLower, rlRest, rlBent, 0.12f);
-            if (head != null) yield return RotateBoneOverTime(head, hRest, hTilt, 0.15f);
+            // Cross — all arms in parallel, EaseInOutBack for that weighted feel
+            float crossDur = Vary(0.32f);
+            StartCoroutine(RotateBoneOverTime(leftArm,  lRest,  lCross, crossDur,         EaseInOutBack));
+            StartCoroutine(RotateBoneDelayed(rightArm,  rRest,  rCross, crossDur * 0.92f, 0.03f));
+            if (leftLower  != null) StartCoroutine(RotateBoneDelayed(leftLower,  llRest, llBent, crossDur * 0.78f, 0.07f));
+            if (rightLower != null) StartCoroutine(RotateBoneDelayed(rightLower, rlRest, rlBent, crossDur * 0.78f, 0.09f));
+            if (head != null)       StartCoroutine(RotateBoneDelayed(head,       hRest,  hTilt,  crossDur * 0.65f, 0.12f));
+            yield return new WaitForSeconds(crossDur);
 
-            yield return new WaitForSeconds(0.8f);
+            yield return new WaitForSeconds(Vary(0.75f));
 
-            // Uncross
-            if (head != null) yield return RotateBoneOverTime(head, hTilt, hRest, 0.15f);
-            if (leftLower != null) yield return RotateBoneOverTime(leftLower, llBent, llRest, 0.12f);
-            if (rightLower != null) yield return RotateBoneOverTime(rightLower, rlBent, rlRest, 0.12f);
-            yield return RotateBoneOverTime(rightArm, rCross, rRest, 0.2f);
-            yield return RotateBoneOverTime(leftArm, lCross, lRest, 0.3f);
+            // Uncross — all parallel
+            float uncrossDur = Vary(0.3f);
+            if (head       != null) StartCoroutine(RotateBoneOverTime(head,       hTilt,  hRest,  uncrossDur * 0.7f,  SmootherStep));
+            if (leftLower  != null) StartCoroutine(RotateBoneDelayed(leftLower,  llBent, llRest, uncrossDur * 0.75f, 0.04f));
+            if (rightLower != null) StartCoroutine(RotateBoneDelayed(rightLower, rlBent, rlRest, uncrossDur * 0.75f, 0.05f));
+            StartCoroutine(RotateBoneDelayed(rightArm, rCross, rRest, uncrossDur * 0.9f, 0.02f));
+            yield return RotateBoneOverTime(leftArm, lCross, lRest, uncrossDur, SmootherStep);
         }
         else
         {
@@ -2335,25 +2358,29 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion rlStr = rlRest * Quaternion.Euler(-10f, 0f, 0f);
             Quaternion sArch = sRest * Quaternion.Euler(-5f, 0f, 0f);
 
-            yield return RotateBoneOverTime(leftArm, lRest, lUp, 0.3f);
-            yield return RotateBoneOverTime(rightArm, rRest, rUp, 0.2f);
-            if (leftLower != null) yield return RotateBoneOverTime(leftLower, llRest, llStr, 0.12f);
-            if (rightLower != null) yield return RotateBoneOverTime(rightLower, rlRest, rlStr, 0.1f);
-            if (spine != null) yield return RotateBoneOverTime(spine, sRest, sArch, 0.12f);
+            // Both arms shoot up simultaneously with EaseOutBack — feels like a celebration burst
+            float upDur = Vary(0.28f);
+            StartCoroutine(RotateBoneOverTime(leftArm,  lRest,  lUp,   upDur,         EaseOutBack));
+            StartCoroutine(RotateBoneDelayed(rightArm,  rRest,  rUp,   upDur * 0.96f, 0.015f));
+            if (leftLower  != null) StartCoroutine(RotateBoneDelayed(leftLower,  llRest, llStr, upDur * 0.82f, 0.05f));
+            if (rightLower != null) StartCoroutine(RotateBoneDelayed(rightLower, rlRest, rlStr, upDur * 0.82f, 0.06f));
+            if (spine != null)      StartCoroutine(RotateBoneDelayed(spine,      sRest,  sArch, upDur * 0.7f,  0.08f));
+            yield return new WaitForSeconds(upDur);
 
             // Victory bounces
             for (int i = 0; i < 3; i++)
             {
-                yield return MoveOverTime(Vector3.up, 0.08f, 0.08f);
-                yield return MoveOverTime(Vector3.up, -0.08f, 0.08f);
+                yield return MoveOverTime(Vector3.up,  0.08f, Vary(0.08f));
+                yield return MoveOverTime(Vector3.up, -0.08f, Vary(0.07f));
             }
 
-            // Lower arms smoothly
-            if (spine != null) yield return RotateBoneOverTime(spine, sArch, sRest, 0.15f);
-            if (leftLower != null) yield return RotateBoneOverTime(leftLower, llStr, llRest, 0.1f);
-            if (rightLower != null) yield return RotateBoneOverTime(rightLower, rlStr, rlRest, 0.1f);
-            yield return RotateBoneOverTime(rightArm, rUp, rRest, 0.2f);
-            yield return RotateBoneOverTime(leftArm, lUp, lRest, 0.3f);
+            // Lower — all parallel, SmootherStep for a gentle float down
+            float downDur = Vary(0.32f);
+            if (spine      != null) StartCoroutine(RotateBoneOverTime(spine,     sArch,  sRest,  downDur * 0.78f, SmootherStep));
+            if (leftLower  != null) StartCoroutine(RotateBoneDelayed(leftLower,  llStr,  llRest, downDur * 0.82f, 0.03f));
+            if (rightLower != null) StartCoroutine(RotateBoneDelayed(rightLower, rlStr,  rlRest, downDur * 0.82f, 0.04f));
+            StartCoroutine(RotateBoneDelayed(rightArm, rUp, rRest, downDur * 0.95f, 0.015f));
+            yield return RotateBoneOverTime(leftArm, lUp, lRest, downDur, SmootherStep);
         }
         else
         {
