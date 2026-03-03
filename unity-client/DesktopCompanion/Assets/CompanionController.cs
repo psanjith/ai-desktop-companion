@@ -48,7 +48,6 @@ public class CompanionController : MonoBehaviour
     private GameObject toggleButton;   // 💬 button shown when chat is closed
     private Image micButtonImage;      // ref for colour pulsing when recording
     private TMP_Text micLabel;         // ref for "MIC" / "REC" label updates
-    private GameObject hintsBar;       // keyboard shortcuts strip
 
     // Exposed for VoiceInputManager
     public Image  MicButtonImage    => micButtonImage;
@@ -71,11 +70,9 @@ public class CompanionController : MonoBehaviour
         StyleSpeechBubble();
         BuildChatPanel(canvas);
         BuildToggleButton(canvas);
-        BuildHintsBar(canvas);
 
         UpdateCharacterNameUI();
         SetTextChatVisible(false);
-        StartCoroutine(ShowWelcomeBubble());
 
         // Auto-attach VoiceInputManager if not already present
         if (GetComponent<VoiceInputManager>() == null)
@@ -225,12 +222,12 @@ public class CompanionController : MonoBehaviour
         GameObject closeBtn = new GameObject("CloseButton");
         closeBtn.transform.SetParent(chatPanel.transform, false);
         var closeBg = closeBtn.AddComponent<Image>();
-        closeBg.color = new Color(0f, 0f, 0f, 0f); // transparent background
+        closeBg.color = BgButton;
         var closeButton = closeBtn.AddComponent<Button>();
         var closeCols = closeButton.colors;
-        closeCols.normalColor      = new Color(0f, 0f, 0f, 0f);
-        closeCols.highlightedColor = new Color(1f, 1f, 1f, 0.06f);
-        closeCols.pressedColor     = new Color(1f, 1f, 1f, 0.12f);
+        closeCols.normalColor      = BgButton;
+        closeCols.highlightedColor = new Color(0.24f, 0.24f, 0.30f, 1f);
+        closeCols.pressedColor     = new Color(0.30f, 0.30f, 0.38f, 1f);
         closeCols.fadeDuration     = 0.08f;
         closeButton.colors = closeCols;
         closeButton.onClick.AddListener(OnToggleChat);
@@ -244,8 +241,8 @@ public class CompanionController : MonoBehaviour
         closeIconRect.anchorMin = Vector2.zero; closeIconRect.anchorMax = Vector2.one;
         closeIconRect.sizeDelta = Vector2.zero; closeIconRect.offsetMin = Vector2.zero; closeIconRect.offsetMax = Vector2.zero;
         var closeIcon = closeIconObj.AddComponent<TextMeshProUGUI>();
-        closeIcon.text = "✕"; closeIcon.fontSize = 12f;
-        closeIcon.color = new Color(0.38f, 0.40f, 0.50f, 1f);
+        closeIcon.text = "x"; closeIcon.fontSize = 13f;
+        closeIcon.color = new Color(0.46f, 0.48f, 0.60f, 1f);
         closeIcon.alignment = TextAlignmentOptions.Center;
         closeIcon.enableWordWrapping = false;
         closeBtn.transform.SetAsLastSibling(); // will be placed at end of layout
@@ -324,16 +321,16 @@ public class CompanionController : MonoBehaviour
             GameObject micBtn = new GameObject("MicButton");
             micBtn.transform.SetParent(chatPanel.transform, false);
             micButtonImage = micBtn.AddComponent<Image>();
-            micButtonImage.color = new Color(0f, 0f, 0f, 0f);
+            micButtonImage.color = BgButton;
             var micLE = micBtn.AddComponent<LayoutElement>();
             micLE.minWidth = 38f; micLE.preferredWidth = 38f;
             micLE.minHeight = 38f; micLE.preferredHeight = 38f;
             micLE.flexibleWidth = 0f;
             var micBtnComp = micBtn.AddComponent<Button>();
             var micCols = micBtnComp.colors;
-            micCols.normalColor      = new Color(0f, 0f, 0f, 0f);
-            micCols.highlightedColor = new Color(1f, 1f, 1f, 0.06f);
-            micCols.pressedColor     = new Color(1f, 1f, 1f, 0.12f);
+            micCols.normalColor      = BgButton;
+            micCols.highlightedColor = new Color(0.24f, 0.24f, 0.30f, 1f);
+            micCols.pressedColor     = new Color(0.30f, 0.30f, 0.38f, 1f);
             micCols.fadeDuration     = 0.08f;
             micBtnComp.colors = micCols;
             micBtnComp.onClick.AddListener(() => {
@@ -346,7 +343,7 @@ public class CompanionController : MonoBehaviour
             micIconRect.anchorMin = Vector2.zero; micIconRect.anchorMax = Vector2.one;
             micIconRect.sizeDelta = Vector2.zero; micIconRect.offsetMin = Vector2.zero; micIconRect.offsetMax = Vector2.zero;
             var micIcon = micIconObj.AddComponent<TextMeshProUGUI>();
-            micIcon.text = "⏺"; micIcon.fontSize = 16f;
+            micIcon.text = "MIC"; micIcon.fontSize = 11f;
             micIcon.color = new Color(0.46f, 0.48f, 0.60f, 1f);
             micIcon.alignment = TextAlignmentOptions.Center;
             micIcon.enableWordWrapping = false;
@@ -371,15 +368,15 @@ public class CompanionController : MonoBehaviour
             le.flexibleWidth  = 0f;
 
             var swBg = switchButton.GetComponent<Image>();
-            if (swBg != null) swBg.color = new Color(0f, 0f, 0f, 0f);
+            if (swBg != null) swBg.color = BgButton;
 
             var swBtn = switchButton.GetComponent<Button>();
             if (swBtn != null)
             {
                 var cols = swBtn.colors;
-                cols.normalColor      = new Color(0f, 0f, 0f, 0f);
-                cols.highlightedColor = new Color(1f, 1f, 1f, 0.06f);
-                cols.pressedColor     = new Color(1f, 1f, 1f, 0.12f);
+                cols.normalColor      = BgButton;
+                cols.highlightedColor = new Color(0.24f, 0.24f, 0.30f, 1f);
+                cols.pressedColor     = new Color(0.30f, 0.30f, 0.38f, 1f);
                 cols.fadeDuration     = 0.08f;
                 swBtn.colors = cols;
             }
@@ -387,10 +384,10 @@ public class CompanionController : MonoBehaviour
             var swLabel = switchButton.GetComponentInChildren<TMP_Text>();
             if (swLabel != null)
             {
-                swLabel.text      = "⟳";
+                swLabel.text      = ">>";
                 swLabel.color     = new Color(0.46f, 0.48f, 0.60f, 1f);
-                swLabel.fontSize  = 18f;
-                swLabel.fontStyle = FontStyles.Normal;
+                swLabel.fontSize  = 12f;
+                swLabel.fontStyle = FontStyles.Bold;
                 swLabel.alignment = TextAlignmentOptions.Center;
             }
         }
@@ -493,11 +490,7 @@ public class CompanionController : MonoBehaviour
         if (chatPanel != null)
             chatPanel.SetActive(visible);
 
-        // Keyboard hints strip — visible only when chat is open
-        if (hintsBar != null)
-            hintsBar.SetActive(visible);
-
-        // 💬 button always stays visible as a fallback
+        // Chat toggle button always stays visible as a fallback
         if (toggleButton != null)
             toggleButton.SetActive(!visible);
 
@@ -528,64 +521,10 @@ public class CompanionController : MonoBehaviour
     public void SetMicActiveLabel(bool recording)
     {
         if (micLabel == null) return;
-        micLabel.text  = recording ? "⏹" : "⏺";  // stop vs record icon
+        micLabel.text  = recording ? "REC" : "MIC";
         micLabel.color = recording
             ? new Color(0.95f, 0.35f, 0.35f, 1f)  // red while recording
             : new Color(0.46f, 0.48f, 0.60f, 1f);
-    }
-
-    /// <summary>
-    /// Builds a thin keyboard-shortcut hints strip that sits just above the chat bar.
-    /// Visible only while the chat panel is open.
-    /// </summary>
-    private void BuildHintsBar(Canvas canvas)
-    {
-        if (canvas == null) return;
-
-        hintsBar = new GameObject("HintsBar");
-        hintsBar.transform.SetParent(canvas.transform, false);
-
-        var rect = hintsBar.AddComponent<RectTransform>();
-        rect.anchorMin        = new Vector2(0f, 0f);
-        rect.anchorMax        = new Vector2(1f, 0f);
-        rect.pivot            = new Vector2(0.5f, 0f);
-        rect.anchoredPosition = new Vector2(0f, 56f); // just above the 56px chat bar
-        rect.sizeDelta        = new Vector2(0f, 16f);
-
-        var bg = hintsBar.AddComponent<Image>();
-        bg.color = new Color(0.05f, 0.05f, 0.07f, 0.70f);
-
-        var textObj  = new GameObject("HintText");
-        textObj.transform.SetParent(hintsBar.transform, false);
-        var textRect = textObj.AddComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.sizeDelta = Vector2.zero;
-        textRect.offsetMin = new Vector2(8f, 0f);
-        textRect.offsetMax = new Vector2(-8f, 0f);
-
-        var hint = textObj.AddComponent<TextMeshProUGUI>();
-        hint.text               = "Enter = Send  ·  M = Mic  ·  C = Chat  ·  Scroll = Resize  ·  Drag = Move  ·  ESC = Quit";
-        hint.fontSize           = 8.5f;
-        hint.color              = new Color(0.36f, 0.38f, 0.50f, 0.70f);
-        hint.alignment          = TextAlignmentOptions.Center;
-        hint.enableWordWrapping = false;
-
-        hintsBar.SetActive(false); // hidden until chat opens
-    }
-
-    /// <summary>
-    /// Shows a one-time welcome message in the speech bubble on first launch.
-    /// </summary>
-    private IEnumerator ShowWelcomeBubble()
-    {
-        if (PlayerPrefs.GetInt("WelcomeSeen_v1", 0) == 1) yield break;
-
-        yield return new WaitForSeconds(2f); // let the model and window settle
-
-        ShowBubble("Hi! Press C or click Chat to type a message. Press M to use your mic. Drag to move me, scroll to resize!");
-        PlayerPrefs.SetInt("WelcomeSeen_v1", 1);
-        PlayerPrefs.Save();
     }
 
     /// <summary>
