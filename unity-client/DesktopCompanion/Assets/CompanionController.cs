@@ -83,10 +83,6 @@ public class CompanionController : MonoBehaviour
         if (GetComponent<VoiceInputManager>() == null)
             gameObject.AddComponent<VoiceInputManager>();
 
-        // Auto-attach WindowDragger for click-drag window repositioning
-        if (GetComponent<WindowDragger>() == null)
-            gameObject.AddComponent<WindowDragger>();
-
         // Start periodic backend health-check
         StartCoroutine(HealthCheckLoop());
     }
@@ -451,6 +447,9 @@ public class CompanionController : MonoBehaviour
                 cols.pressedColor     = new Color(0.27f, 0.28f, 0.38f, 1f);
                 cols.fadeDuration     = 0.12f;
                 swBtn.colors = cols;
+                // RemoveAllListeners first so Inspector-assigned + code listeners don't stack
+                // into a double-call that immediately toggles back.
+                swBtn.onClick.RemoveAllListeners();
                 swBtn.onClick.AddListener(OnSwitchCharacter);
             }
 
