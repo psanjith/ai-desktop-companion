@@ -1,6 +1,8 @@
 using UnityEngine;
+using UnityEngine.EventSystems;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 /// <summary>
@@ -102,11 +104,13 @@ public class WindowDragger : MonoBehaviour
 
     void Update()
     {
-        // ─── Window Drag (click & drag anywhere) ───
+    // ─── Window Drag (click & drag anywhere EXCEPT interactive UI) ───
 #if !UNITY_EDITOR
         if (Input.GetMouseButtonDown(0))
         {
-            StartNativeDrag();
+            // Don't steal clicks from buttons, input fields, etc.
+            if (!IsPointerOverInteractable())
+                StartNativeDrag();
         }
 #endif
 
@@ -131,6 +135,25 @@ public class WindowDragger : MonoBehaviour
         // ESC to quit
         if (Input.GetKeyDown(KeyCode.Escape))
             Application.Quit();
+    }
+
+    // Reused list to avoid GC allocs on every frame
+    private readonly List<RaycastResult> _raycastResults = new List<RaycastResult>();
+
+    /// <summary>
+    /// Returns true when the cursor is over a Selectable UI element (Button, InputField,
+    /// Dropdown, etc.) so drag does not steal those interactions.
+    /// </summary>
+    private bool IsPointerOverInteractable()
+    {
+        if (EventSystem.current == null) return false;
+        _raycastResults.Clear();
+        var data = new PointerEventData(EventSystem.current) { position = Input.mousePosition };
+        EventSystem.current.RaycastAll(data, _raycastResults);
+        foreach (var r in _raycastResults)
+            if (r.gameObject.GetComponentInParent<UnityEngine.UI.Selectable>() != null)
+                return true;
+        return false;
     }
 
     private void ResizeWindow(int delta)

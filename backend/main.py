@@ -135,7 +135,7 @@ def get_db():
 
 
 def build_messages(personality, history, user_input):
-    """Build the Ollama messages list — shared by /chat and /chat/stream."""
+    """Build the LLM messages list — shared by /chat and /chat/stream."""
     char_name = personality.get("name", "Companion")
     quirks = personality.get("quirks", "")
     messages = [
@@ -183,8 +183,8 @@ def chat(user_input, character="female_default"):
     if not personality:
         personality = list(all_personalities.values())[0]
 
-    # Load last 2 interactions for THIS character only
-    cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 2", (character,))
+    # Load last 8 interactions for THIS character only
+    cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 8", (character,))
     history = cur.fetchall()
     messages = build_messages(personality, history, user_input)
 
@@ -244,8 +244,8 @@ def chat_stream_api():
         if not personality:
             personality = list(all_personalities.values())[0]
 
-        # Load history and build messages
-        cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 2", (character,))
+        # Load history and build messages (last 8 exchanges)
+        cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 8", (character,))
         history = cur.fetchall()
         messages = build_messages(personality, history, user_input)
 
@@ -344,6 +344,41 @@ def memory_clear():
         conn.commit()
         conn.close()
         return jsonify({"ok": True, "character": character})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# Process handle so we can kill previous speech before starting new one
+_speak_proc = None
+
+
+@app.route("/speak", methods=["POST"])
+def speak():
+    """Speak text using macOS built-in TTS (non-blocking, macOS only)."""
+    global _speak_proc
+    import subprocess
+    import sys
+    try:
+        data = request.get_json() or {}
+        text = data.get("text", "").strip()
+        character = data.get("character", "female_default")
+        if not text:
+            return jsonify({"ok": False, "error": "No text"}), 400
+
+        # macOS only
+        if sys.platform != "darwin":
+            return jsonify({"ok": False, "note": "TTS only supported on macOS"})
+
+        # Kill previous speech if still running
+        if _speak_proc and _speak_proc.poll() is None:
+            _speak_proc.terminate()
+
+        # Pick voice by character — Samantha (female, natural) or Alex (male)
+        voice = "Samantha" if "female" in character else "Alex"
+
+        # Launch non-blocking (fire and forget)
+        _speak_proc = subprocess.Popen(["say", "-v", voice, "-r", "175", text])
+        return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

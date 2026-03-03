@@ -18,6 +18,7 @@ public class CompanionController : MonoBehaviour
 
     private string streamUrl = "http://127.0.0.1:5001/chat/stream";
     private string clearUrl  = "http://127.0.0.1:5001/memory/clear";
+    private const string SpeakUrl = "http://127.0.0.1:5001/speak";
 
     // Text chat toggle
     private bool textChatVisible = false;
@@ -82,6 +83,10 @@ public class CompanionController : MonoBehaviour
         if (GetComponent<VoiceInputManager>() == null)
             gameObject.AddComponent<VoiceInputManager>();
 
+        // Auto-attach WindowDragger for click-drag window repositioning
+        if (GetComponent<WindowDragger>() == null)
+            gameObject.AddComponent<WindowDragger>();
+
         // Start periodic backend health-check
         StartCoroutine(HealthCheckLoop());
     }
@@ -117,6 +122,18 @@ public class CompanionController : MonoBehaviour
     {
         if (_bubbleDismissTimer != null) { StopCoroutine(_bubbleDismissTimer); _bubbleDismissTimer = null; }
         if (speechBubble != null) speechBubble.SetActive(false);
+    }
+
+    /// <summary>
+    /// Update bubble text in-place — does NOT restart the dismiss timer.
+    /// Use during live token streaming to avoid resetting the auto-dismiss countdown
+    /// on every incoming token.
+    /// </summary>
+    private void SetBubbleText(string text)
+    {
+        if (speechBubbleText == null) return;
+        speechBubbleText.text  = text;
+        speechBubbleText.color = new Color(TextPrimary.r, TextPrimary.g, TextPrimary.b, 1f);
     }
 
     /// <summary>
@@ -434,6 +451,7 @@ public class CompanionController : MonoBehaviour
                 cols.pressedColor     = new Color(0.27f, 0.28f, 0.38f, 1f);
                 cols.fadeDuration     = 0.12f;
                 swBtn.colors = cols;
+                swBtn.onClick.AddListener(OnSwitchCharacter);
             }
 
             var swLabel = switchButton.GetComponentInChildren<TMP_Text>();
@@ -790,6 +808,7 @@ public class CompanionController : MonoBehaviour
                                             .Replace(safeReply, @"\s{2,}", " ").Trim();
                                         if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
                                         ShowBubble(safeReply);
+                                        StartCoroutine(SpeakReply(safeReply, charName));
                                     }
                                     // Stop talking mouth
                                     if (faceAnim != null)
@@ -843,7 +862,7 @@ public class CompanionController : MonoBehaviour
                                         if (display.Length > 0)
                                         {
                                             if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
-                                            ShowBubble(display);
+                                            SetBubbleText(display);
                                         }
                                     }
                                 }
@@ -916,6 +935,22 @@ public class CompanionController : MonoBehaviour
             if (speechBubbleText != null) speechBubbleText.text = frames[i % 3];
             i++;
             yield return new WaitForSeconds(0.4f);
+        }
+    }
+
+    /// <summary>
+    /// Fire-and-forget coroutine: sends cleaned reply text to /speak for macOS TTS.
+    /// </summary>
+    IEnumerator SpeakReply(string text, string character)
+    {
+        string body = JsonUtility.ToJson(new SpeakRequest { text = text, character = character });
+        byte[] raw  = System.Text.Encoding.UTF8.GetBytes(body);
+        using (UnityWebRequest req = new UnityWebRequest(SpeakUrl, "POST"))
+        {
+            req.uploadHandler   = new UploadHandlerRaw(raw);
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+            yield return req.SendWebRequest();
         }
     }
 
@@ -1022,6 +1057,13 @@ public class CompanionController : MonoBehaviour
     [System.Serializable]
     private class ClearRequest
     {
+        public string character;
+    }
+
+    [System.Serializable]
+    private class SpeakRequest
+    {
+        public string text;
         public string character;
     }
 
