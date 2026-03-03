@@ -1200,50 +1200,53 @@ public class EmoteAnimator : MonoBehaviour
             //   UpperArm +Z → BACK   ∴ roll axis — not used
             //
             // Goal: arm raised to side, elbow bent OUTWARD, forearm up, palm facing viewer.
-            //   Upper arm: -90 X (straight up), 0 Y (arm stays out to the side, not pulled inward)
             Quaternion armRaised = armRest * Quaternion.Euler(-90f, 0f, 0f);
-
-            // LowerArm +X → DOWN (same as upper arm).
-            // -80 X bends the elbow OUTWARD (away from body).
-            // +80 X was bending it inward — flip the sign to go the other way.
             Quaternion lowerBent = lowerRest * Quaternion.Euler(-80f, 0f, 0f);
-
-            Quaternion headTilt  = headRest  * Quaternion.Euler(0f, -12f, 0f); // look toward raised arm
-            Quaternion spineLean = spineRest * Quaternion.Euler(0f,  0f, -3f);
-
-            // Hand wave: ±X rocks the palm left/right (confirmed: hand +X → DOWN/LEFT).
-            // Positive X tilts palm one way, negative the other — visible side-to-side sway.
+            Quaternion headTilt  = headRest  * Quaternion.Euler(0f, -12f, 0f);
+            Quaternion spineLean = spineRest * Quaternion.Euler(0f,  0f,  -3f);
+            // Hand oscillates purely between A and B — no mid-cycle return to rest.
             Quaternion handWaveA = handRest * Quaternion.Euler( 30f, 0f, 0f);
             Quaternion handWaveB = handRest * Quaternion.Euler(-30f, 0f, 0f);
 
-            // Tiny windup drop before the raise
-            Quaternion armWindup = armRest * Quaternion.Euler(6f, 0f, 0f);
-            yield return RotateBoneOverTime(rightArm, armRest, armWindup, 0.07f);
+            // ── Phase 1: Anticipation windup (tiny drop before the snap up) ──────────
+            Quaternion armWindup = armRest * Quaternion.Euler(8f, 0f, 0f);
+            yield return RotateBoneOverTime(rightArm, armRest, armWindup, 0.06f, SmootherStep);
 
-            // Raise arm and set elbow simultaneously
-            yield return RotateBoneOverTime(rightArm, armWindup, armRaised, 0.22f);
-            if (rightLower != null) rightLower.localRotation = lowerBent;
-            if (head  != null) head.localRotation  = headTilt;
-            if (spine != null) spine.localRotation = spineLean;
+            // ── Phase 2: Arm snaps up with EaseOutBack overshoot ─────────────────────
+            //    While the arm is still rising, start elbow + head + spine in parallel
+            //    so every body part doesn't start/stop at the same frame.
+            float raiseDur = Vary(0.25f);
+            if (rightLower != null) StartCoroutine(RotateBoneDelayed(rightLower, lowerRest, lowerBent, raiseDur * 0.9f, 0.04f));
+            if (head  != null)      StartCoroutine(RotateBoneDelayed(head,       headRest,  headTilt,  raiseDur * 0.85f, 0.06f));
+            if (spine != null)      StartCoroutine(RotateBoneDelayed(spine,      spineRest, spineLean, raiseDur * 0.8f,  0.05f));
+            yield return RotateBoneOverTime(rightArm, armWindup, armRaised, raiseDur, EaseOutBack);
 
-            // Wave: palm sways left/right, arm is still — 3 cycles
-            for (int i = 0; i < 3; i++)
+            // ── Phase 3: Wave — palm rocks A↔B, pure oscillation, no rest-snap ───────
+            //    Each half-swing uses EaseOutElastic so the palm has a springy snap.
+            float halfSwing = Vary(0.13f);
+            bool toA = true;
+            for (int i = 0; i < 6; i++)   // 6 half-swings = 3 full cycles
             {
                 if (rightHand != null)
-                    yield return RotateBoneOverTime(rightHand, rightHand.localRotation, handWaveA, 0.11f);
-                if (rightHand != null)
-                    yield return RotateBoneOverTime(rightHand, handWaveA, handWaveB, 0.20f);
-                if (rightHand != null)
-                    yield return RotateBoneOverTime(rightHand, handWaveB, handRest, 0.11f);
+                {
+                    Quaternion waveFrom = toA ? handRest  : handWaveA;
+                    Quaternion waveTo   = toA ? handWaveA : handWaveB;
+                    // Alternate last swing back to rest so we land cleanly
+                    if (i == 5) waveTo = handRest;
+                    yield return RotateBoneOverTime(rightHand, waveFrom, waveTo,
+                                                    i == 0 ? halfSwing * 0.7f : halfSwing,
+                                                    EaseOutElastic);
+                    toA = !toA;
+                }
             }
 
-            // Lower everything back smoothly
-            if (rightHand  != null) rightHand.localRotation  = handRest;
-            if (rightLower != null)
-                yield return RotateBoneOverTime(rightLower, lowerBent, lowerRest, 0.18f);
-            if (head  != null) yield return RotateBoneOverTime(head,  headTilt,  headRest,  0.15f);
-            if (spine != null) spine.localRotation = spineRest;
-            yield return RotateBoneOverTime(rightArm, armRaised, armRest, 0.30f);
+            // ── Phase 4: Lower everything simultaneously with SmootherStep ────────────
+            float lowerDur = Vary(0.32f);
+            if (rightHand  != null) StartCoroutine(RotateBoneOverTime(rightHand,  handRest,  handRest,  0.01f, SmootherStep)); // ensure landed
+            if (rightLower != null) StartCoroutine(RotateBoneOverTime(rightLower, lowerBent, lowerRest, lowerDur * 0.85f, SmootherStep));
+            if (head  != null)      StartCoroutine(RotateBoneOverTime(head,       headTilt,  headRest,  lowerDur * 0.9f,  SmootherStep));
+            if (spine != null)      StartCoroutine(RotateBoneOverTime(spine,      spineLean, spineRest, lowerDur * 0.75f, SmootherStep));
+            yield return RotateBoneOverTime(rightArm, armRaised, armRest, lowerDur, SmootherStep);
         }
         else
         {
@@ -2578,11 +2581,70 @@ public class EmoteAnimator : MonoBehaviour
 
     // --- Helper coroutines ---
 
-    /// <summary> Perlin's SmootherStep — zero velocity AND acceleration at boundaries for ultra-smooth easing. </summary>
+    /// <summary> Perlin's SmootherStep — zero velocity AND zero acceleration at both ends. </summary>
     private static float SmootherStep(float t)
     {
         t = Mathf.Clamp01(t);
         return t * t * t * (t * (t * 6f - 15f) + 10f);
+    }
+
+    /// <summary>
+    /// EaseOutBack — accelerates fast then overshoots the target by ~17% and settles back.
+    /// Use for snappy "thrown" movements like raising an arm or a head snap.
+    /// </summary>
+    private static float EaseOutBack(float t)
+    {
+        t = Mathf.Clamp01(t);
+        const float c1 = 1.70158f;
+        const float c3 = c1 + 1f;
+        float u = t - 1f;
+        return 1f + c3 * u * u * u + c1 * u * u;
+    }
+
+    /// <summary>
+    /// EaseInOutBack — small anticipation wind-up at the start, slight overshoot at the end.
+    /// Use for deliberate gestures that feel weighted (e.g. shrug, clap).
+    /// </summary>
+    private static float EaseInOutBack(float t)
+    {
+        t = Mathf.Clamp01(t);
+        const float c1 = 1.70158f;
+        const float c2 = c1 * 1.525f;
+        return t < 0.5f
+            ? (Mathf.Pow(2f * t, 2f) * ((c2 + 1f) * 2f * t - c2)) / 2f
+            : (Mathf.Pow(2f * t - 2f, 2f) * ((c2 + 1f) * (t * 2f - 2f) + c2) + 2f) / 2f;
+    }
+
+    /// <summary>
+    /// EaseOutElastic — springy bounce that decays to rest. Slightly overshoots then rings.
+    /// Use for repetitive oscillating motion like a hand wave or a finger wag.
+    /// </summary>
+    private static float EaseOutElastic(float t)
+    {
+        t = Mathf.Clamp01(t);
+        if (t <= 0f) return 0f;
+        if (t >= 1f) return 1f;
+        const float c4 = (2f * Mathf.PI) / 3f;
+        return Mathf.Pow(2f, -10f * t) * Mathf.Sin((t * 10f - 0.75f) * c4) + 1f;
+    }
+
+    /// <summary>
+    /// Variant of RotateBoneOverTime that accepts a custom easing function.
+    /// Pass SmootherStep, EaseOutBack, EaseOutElastic, EaseInOutBack, etc.
+    /// </summary>
+    IEnumerator RotateBoneOverTime(Transform bone, Quaternion from, Quaternion to, float duration,
+                                    System.Func<float, float> ease)
+    {
+        if (bone == null) yield break;
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float t = ease(elapsed / duration);
+            bone.localRotation = Quaternion.Slerp(from, to, t);
+            yield return null;
+        }
+        bone.localRotation = to;
     }
 
     /// <summary> Start a bone rotation after a delay — enables cascading parallel movement. </summary>
