@@ -106,8 +106,8 @@ public class EmoteAnimator : MonoBehaviour
             while (isPlaying) yield return null;
 
             // Wait until we have enough new text to analyze
-            // (at least ~50 chars since last gesture = ~10 words)
-            while (currentStreamText.Length - lastGestureTextPos < 50)
+            // (at least ~65 chars since last gesture = ~13 words)
+            while (currentStreamText.Length - lastGestureTextPos < 65)
             {
                 if (isPlaying) break;
                 yield return null;
@@ -117,8 +117,8 @@ public class EmoteAnimator : MonoBehaviour
             // Play a contextually relevant gesture based on recent text
             yield return PlayContextualGesture();
 
-            // Relaxed pause between gestures (4.0 - 7.0s) for calm rhythm
-            float wait = Random.Range(4.0f, 7.0f);
+            // Relaxed pause between gestures (5.0 - 9.0s) for calm rhythm
+            float wait = Random.Range(5.0f, 9.0f);
             float elapsed = 0f;
             while (elapsed < wait)
             {
@@ -411,7 +411,7 @@ public class EmoteAnimator : MonoBehaviour
         if (head == null) yield break;
         Quaternion rest = head.localRotation;
         float dir = Random.value > 0.5f ? 1f : -1f;
-        Quaternion tilted = rest * Quaternion.Euler(0f, 0f, VaryAngle(12f) * dir);
+        Quaternion tilted = rest * Quaternion.Euler(0f, 0f, VaryAngle(10f) * dir);
         yield return RotateBoneOverTime(head, rest, tilted, Vary(0.45f), EaseInOutBack);
         yield return new WaitForSeconds(Vary(0.45f));
         yield return RotateBoneOverTime(head, tilted, rest, Vary(0.4f), SmootherStep);
@@ -430,8 +430,8 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion hRest = hand != null ? hand.localRotation : Quaternion.identity;
 
         float side = useRight ? -1f : 1f;
-        Quaternion aUp = aRest * Quaternion.Euler(VaryAngle(-28f), 0f, VaryAngle(12f) * side);
-        Quaternion lBent = lRest * Quaternion.Euler(VaryAngle(-30f), 0f, 0f);
+        Quaternion aUp = aRest * Quaternion.Euler(VaryAngle(-22f), 0f, VaryAngle(12f) * side);
+        Quaternion lBent = lRest * Quaternion.Euler(VaryAngle(-24f), 0f, 0f);
         Quaternion hTilt = hRest * Quaternion.Euler(0f, 0f, VaryAngle(10f) * side);
 
         // Raise: arm leads, elbow cascades, hand follows
@@ -464,7 +464,7 @@ public class EmoteAnimator : MonoBehaviour
         for (int i = 0; i < 2; i++)
         {
             // Each nod varies slightly in depth and speed
-            float nodDepth = VaryAngle(10f);
+            float nodDepth = VaryAngle(8f);
             float nodSpeed = Vary(0.22f);
             Quaternion down = hRest * Quaternion.Euler(nodDepth, 0f, 0f);
             yield return RotateBoneOverTime(head, hRest, down, nodSpeed, EaseInOutBack);
@@ -483,8 +483,8 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion sRest = spine.localRotation;
         Quaternion hRest = head != null ? head.localRotation : Quaternion.identity;
 
-        Quaternion sLean = sRest * Quaternion.Euler(VaryAngle(8f), 0f, 0f);
-        Quaternion hUp = hRest * Quaternion.Euler(VaryAngle(-5f), 0f, 0f);
+        Quaternion sLean = sRest * Quaternion.Euler(VaryAngle(6f), 0f, 0f);
+        Quaternion hUp = hRest * Quaternion.Euler(VaryAngle(-4f), 0f, 0f);
 
         // Lean in: spine leads, head follows slightly after
         float dur = Vary(0.45f);
@@ -512,9 +512,9 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion hRest = hand != null ? hand.localRotation : Quaternion.identity;
 
         float side = useRight ? -1f : 1f;
-        Quaternion aOut = aRest * Quaternion.Euler(VaryAngle(-24f), VaryAngle(7f) * side, VaryAngle(14f) * side);
-        Quaternion lStraight = lRest * Quaternion.Euler(VaryAngle(-14f), 0f, 0f);
-        Quaternion hFlat = hRest * Quaternion.Euler(VaryAngle(-17f), 0f, 0f);
+        Quaternion aOut = aRest * Quaternion.Euler(VaryAngle(-20f), VaryAngle(7f) * side, VaryAngle(14f) * side);
+        Quaternion lStraight = lRest * Quaternion.Euler(VaryAngle(-11f), 0f, 0f);
+        Quaternion hFlat = hRest * Quaternion.Euler(VaryAngle(-13f), 0f, 0f);
 
         // Extend: arm leads, elbow and hand cascade
         float dur = Vary(0.42f);
@@ -542,8 +542,8 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion rRest = rightArm.localRotation;
         Quaternion hRest = head != null ? head.localRotation : Quaternion.identity;
 
-        Quaternion lLift = lRest * Quaternion.Euler(VaryAngle(-8f), 0f, VaryAngle(-5f));
-        Quaternion rLift = rRest * Quaternion.Euler(VaryAngle(-8f), 0f, VaryAngle(5f));
+        Quaternion lLift = lRest * Quaternion.Euler(VaryAngle(-6f), 0f, VaryAngle(-4f));
+        Quaternion rLift = rRest * Quaternion.Euler(VaryAngle(-6f), 0f, VaryAngle(4f));
         Quaternion hTilt = hRest * Quaternion.Euler(0f, 0f, VaryAngle(5f));
 
         // All bones lift together with slight cascade
@@ -572,7 +572,7 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion sRest = spine != null ? spine.localRotation : Quaternion.identity;
 
         float dir = Random.value > 0.5f ? 1f : -1f;
-        Quaternion hTurn = hRest * Quaternion.Euler(0f, VaryAngle(15f) * dir, 0f);
+        Quaternion hTurn = hRest * Quaternion.Euler(0f, VaryAngle(12f) * dir, 0f);
         Quaternion sTurn = sRest * Quaternion.Euler(0f, VaryAngle(3f) * dir, 0f);
 
         // Turn: head leads, spine follows slightly
@@ -606,12 +606,12 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion rhRest = rightHand != null ? rightHand.localRotation : Quaternion.identity;
 
         // Both arms come out in an "explaining" pose
-        Quaternion lOut = lRest * Quaternion.Euler(VaryAngle(-20f), 0f, VaryAngle(8f));
-        Quaternion rOut = rRest * Quaternion.Euler(VaryAngle(-20f), 0f, VaryAngle(-8f));
-        Quaternion llBent = llRest * Quaternion.Euler(VaryAngle(-24f), 0f, 0f);
-        Quaternion rlBent = rlRest * Quaternion.Euler(VaryAngle(-24f), 0f, 0f);
-        Quaternion lhUp = lhRest * Quaternion.Euler(VaryAngle(-14f), 0f, 0f);
-        Quaternion rhUp = rhRest * Quaternion.Euler(VaryAngle(-14f), 0f, 0f);
+        Quaternion lOut = lRest * Quaternion.Euler(VaryAngle(-16f), 0f, VaryAngle(8f));
+        Quaternion rOut = rRest * Quaternion.Euler(VaryAngle(-16f), 0f, VaryAngle(-8f));
+        Quaternion llBent = llRest * Quaternion.Euler(VaryAngle(-19f), 0f, 0f);
+        Quaternion rlBent = rlRest * Quaternion.Euler(VaryAngle(-19f), 0f, 0f);
+        Quaternion lhUp = lhRest * Quaternion.Euler(VaryAngle(-11f), 0f, 0f);
+        Quaternion rhUp = rhRest * Quaternion.Euler(VaryAngle(-11f), 0f, 0f);
 
         // All arms rise together with cascade
         float dur = Vary(0.5f);
@@ -647,8 +647,8 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion lRest = lower != null ? lower.localRotation : Quaternion.identity;
 
         float side = useRight ? -1f : 1f;
-        Quaternion aChest = aRest * Quaternion.Euler(VaryAngle(-17f), VaryAngle(10f) * side, VaryAngle(7f) * side);
-        Quaternion lBent = lRest * Quaternion.Euler(VaryAngle(-40f), 0f, 0f);
+        Quaternion aChest = aRest * Quaternion.Euler(VaryAngle(-13f), VaryAngle(10f) * side, VaryAngle(7f) * side);
+        Quaternion lBent = lRest * Quaternion.Euler(VaryAngle(-32f), 0f, 0f);
 
         // Arm and elbow move together toward chest
         float dur = Vary(0.5f);
@@ -675,8 +675,8 @@ public class EmoteAnimator : MonoBehaviour
         Quaternion hRest = head != null ? head.localRotation : Quaternion.identity;
 
         float dir = Random.value > 0.5f ? 1f : -1f;
-        Quaternion sShift = sRest * Quaternion.Euler(0f, 0f, VaryAngle(5f) * dir);
-        Quaternion hipShift = hipRest * Quaternion.Euler(0f, VaryAngle(2.5f) * dir, 0f);
+        Quaternion sShift = sRest * Quaternion.Euler(0f, 0f, VaryAngle(4f) * dir);
+        Quaternion hipShift = hipRest * Quaternion.Euler(0f, VaryAngle(2.0f) * dir, 0f);
         Quaternion hCompensate = hRest * Quaternion.Euler(0f, 0f, VaryAngle(-3f) * dir);
 
         // Shift: spine leads, hips and head follow

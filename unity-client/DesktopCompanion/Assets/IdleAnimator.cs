@@ -9,37 +9,37 @@ using UnityEngine;
 public class IdleAnimator : MonoBehaviour
 {
     [Header("Bobbing (up/down)")]
-    public float bobAmount = 0.012f;
-    public float bobSpeed = 0.55f;
+    public float bobAmount = 0.010f;
+    public float bobSpeed = 0.45f;
 
     [Header("Breathing (chest scale pulse)")]
-    public float breatheAmount = 0.003f;
-    public float breatheSpeed = 0.75f;
+    public float breatheAmount = 0.002f;
+    public float breatheSpeed = 0.65f;
 
     [Header("Body Sway")]
-    public float swayAmount = 1.2f;
-    public float swaySpeed = 0.25f;
+    public float swayAmount = 1.0f;
+    public float swaySpeed = 0.20f;
 
     [Header("Weight Shift (hips)")]
-    public float weightShiftAmount = 0.9f;
-    public float weightShiftSpeed = 0.15f;
+    public float weightShiftAmount = 0.7f;
+    public float weightShiftSpeed = 0.12f;
 
     [Header("Head Movement")]
-    public float headTiltAmount = 2.0f;
-    public float headTiltSpeed = 0.14f;
-    public float headTurnAmount = 3.0f;
-    public float headTurnSpeed = 0.09f;
+    public float headTiltAmount = 1.8f;
+    public float headTiltSpeed = 0.11f;
+    public float headTurnAmount = 2.5f;
+    public float headTurnSpeed = 0.07f;
 
     [Header("Arm Micro-Movement")]
-    public float armSwayAmount = 0.8f;
-    public float armSwaySpeed = 0.28f;
+    public float armSwayAmount = 0.7f;
+    public float armSwaySpeed = 0.22f;
 
     [Header("Elbow Movement")]
-    public float elbowFlexAmount = 1.5f;
-    public float elbowFlexSpeed = 0.20f;
+    public float elbowFlexAmount = 1.0f;
+    public float elbowFlexSpeed = 0.16f;
 
     [Header("Smoothing")]
-    public float boneSmoothing = 5f; // how fast bones chase their target (higher = snappier)
+    public float boneSmoothing = 3.5f; // how fast bones chase their target (higher = snappier)
 
     private Vector3 startPos;
     private float baseScale = 1f;
@@ -84,6 +84,12 @@ public class IdleAnimator : MonoBehaviour
 
     // Per-bone random seeds for asymmetric motion
     private float[] boneSeeds;
+
+    // Mood-reactive amplitude/speed multipliers — smoothly transition on emotion change
+    private float _targetAmpMult   = 1f;
+    private float _targetSpeedMult = 1f;
+    private float _curAmpMult      = 1f;
+    private float _curSpeedMult    = 1f;
 
     void Start()
     {
@@ -175,11 +181,15 @@ public class IdleAnimator : MonoBehaviour
         float t = Time.time + phaseOffset;
         float dt = Time.deltaTime;
 
+        // Smoothly transition mood multipliers (~4s full transition at exp rate 0.4/s)
+        _curAmpMult   = Mathf.Lerp(_curAmpMult,   _targetAmpMult,   1f - Mathf.Exp(-0.4f * dt));
+        _curSpeedMult = Mathf.Lerp(_curSpeedMult, _targetSpeedMult, 1f - Mathf.Exp(-0.4f * dt));
+
         // ---- Whole-body: organic bob + breathe ----
-        float bob = Organic(t, bobSpeed, bobAmount, boneSeeds == null ? 0f : boneSeeds[0]);
+        float bob = Organic(t, bobSpeed * _curSpeedMult, bobAmount * _curAmpMult, boneSeeds == null ? 0f : boneSeeds[0]);
         transform.localPosition = startPos + new Vector3(0f, bob, 0f);
 
-        float breathe = Organic(t, breatheSpeed, breatheAmount, boneSeeds == null ? 0f : boneSeeds[1]);
+        float breathe = Organic(t, breatheSpeed * _curSpeedMult, breatheAmount * _curAmpMult, boneSeeds == null ? 0f : boneSeeds[1]);
         float s = baseScale + breathe;
         transform.localScale = new Vector3(s, s, s);
 
@@ -210,9 +220,9 @@ public class IdleAnimator : MonoBehaviour
         // ---- Spine: organic sway + breath coupling (inhale arches back slightly) ----
         if (spineBone != null)
         {
-            float sway   = Organic(t, swaySpeed, swayAmount * stillness, boneSeeds[2]);
-            float lean   = Organic2(t, swaySpeed * 0.6f, swayAmount * 0.35f * stillness, boneSeeds[2]);
-            float yDrift = Organic(t, swaySpeed * 0.4f, swayAmount * 0.15f, boneSeeds[2] + 5f);
+            float sway   = Organic(t, swaySpeed * _curSpeedMult, swayAmount * stillness * _curAmpMult, boneSeeds[2]);
+            float lean   = Organic2(t, swaySpeed * 0.6f * _curSpeedMult, swayAmount * 0.35f * stillness * _curAmpMult, boneSeeds[2]);
+            float yDrift = Organic(t, swaySpeed * 0.4f * _curSpeedMult, swayAmount * 0.15f * _curAmpMult, boneSeeds[2] + 5f);
             // Breath coupling: positive breathPhase = inhale, arches spine back ~0.8 degrees
             float breathArch = breathPhase * 0.8f;
             Quaternion target = spineRest * Quaternion.Euler(lean + breathArch, yDrift, sway);
@@ -222,8 +232,8 @@ public class IdleAnimator : MonoBehaviour
         // ---- Hips: slow weight shifting with subtle 3-axis drift ----
         if (hipsBone != null)
         {
-            float yaw   = Organic(t, weightShiftSpeed, weightShiftAmount, boneSeeds[3]);
-            float roll  = Organic2(t, weightShiftSpeed * 0.7f, weightShiftAmount * 0.3f, boneSeeds[3]);
+            float yaw   = Organic(t, weightShiftSpeed * _curSpeedMult, weightShiftAmount * _curAmpMult, boneSeeds[3]);
+            float roll  = Organic2(t, weightShiftSpeed * 0.7f * _curSpeedMult, weightShiftAmount * 0.3f * _curAmpMult, boneSeeds[3]);
             Quaternion target = hipsRest * Quaternion.Euler(0f, yaw, roll);
             hipsBone.localRotation = ChaseTarget(hipsBone.localRotation, target, hipsSmooth);
         }
@@ -233,9 +243,9 @@ public class IdleAnimator : MonoBehaviour
         {
             // Perlin gives genuinely non-repeating motion; stillness mask makes head
             // occasionally settle for a beat, like a real person losing interest momentarily
-            float tilt = Perlin(t, headTiltSpeed, headTiltAmount * stillness, boneSeeds[4]);
-            float turn = Perlin(t, headTurnSpeed, headTurnAmount * stillness, boneSeeds[4] + 13f);
-            float nod  = Perlin(t, headTiltSpeed * 0.5f, headTiltAmount * 0.4f * stillness, boneSeeds[4] + 7f);
+            float tilt = Perlin(t, headTiltSpeed * _curSpeedMult, headTiltAmount * stillness * _curAmpMult, boneSeeds[4]);
+            float turn = Perlin(t, headTurnSpeed * _curSpeedMult, headTurnAmount * stillness * _curAmpMult, boneSeeds[4] + 13f);
+            float nod  = Perlin(t, headTiltSpeed * 0.5f * _curSpeedMult, headTiltAmount * 0.4f * stillness * _curAmpMult, boneSeeds[4] + 7f);
             Quaternion target = headRest * Quaternion.Euler(nod, turn, tilt);
             headBone.localRotation = ChaseTarget(headBone.localRotation, target, headSmooth);
         }
@@ -243,16 +253,16 @@ public class IdleAnimator : MonoBehaviour
         // ---- Arms: asymmetric sway (left and right feel independent) ----
         if (leftUpperArm != null)
         {
-            float sw  = Organic(t, armSwaySpeed, armSwayAmount, boneSeeds[5]);
-            float sw2 = Organic2(t, armSwaySpeed * 0.7f, armSwayAmount * 0.25f, boneSeeds[5]);
+            float sw  = Organic(t, armSwaySpeed * _curSpeedMult, armSwayAmount * _curAmpMult, boneSeeds[5]);
+            float sw2 = Organic2(t, armSwaySpeed * 0.7f * _curSpeedMult, armSwayAmount * 0.25f * _curAmpMult, boneSeeds[5]);
             Quaternion target = leftArmRest * Quaternion.Euler(sw, sw2 * 0.3f, sw * 0.25f);
             leftUpperArm.localRotation = ChaseTarget(leftUpperArm.localRotation, target, armSmooth);
         }
         if (rightUpperArm != null)
         {
             // Slightly different speed multiplier for natural asymmetry
-            float sw  = Organic(t, armSwaySpeed * 1.07f, armSwayAmount, boneSeeds[6]);
-            float sw2 = Organic2(t, armSwaySpeed * 0.8f, armSwayAmount * 0.25f, boneSeeds[6]);
+            float sw  = Organic(t, armSwaySpeed * 1.07f * _curSpeedMult, armSwayAmount * _curAmpMult, boneSeeds[6]);
+            float sw2 = Organic2(t, armSwaySpeed * 0.8f * _curSpeedMult, armSwayAmount * 0.25f * _curAmpMult, boneSeeds[6]);
             Quaternion target = rightArmRest * Quaternion.Euler(sw, -sw2 * 0.3f, -sw * 0.25f);
             rightUpperArm.localRotation = ChaseTarget(rightUpperArm.localRotation, target, armSmooth);
         }
@@ -260,15 +270,15 @@ public class IdleAnimator : MonoBehaviour
         // ---- Lower arms: organic flex with twist ----
         if (leftLowerArm != null)
         {
-            float flex  = Organic(t, elbowFlexSpeed, elbowFlexAmount, boneSeeds[7]);
-            float twist = Organic2(t, elbowFlexSpeed * 0.6f, elbowFlexAmount * 0.25f, boneSeeds[7]);
+            float flex  = Organic(t, elbowFlexSpeed * _curSpeedMult, elbowFlexAmount * _curAmpMult, boneSeeds[7]);
+            float twist = Organic2(t, elbowFlexSpeed * 0.6f * _curSpeedMult, elbowFlexAmount * 0.25f * _curAmpMult, boneSeeds[7]);
             Quaternion target = leftLowerArmRest * Quaternion.Euler(flex, twist, 0f);
             leftLowerArm.localRotation = ChaseTarget(leftLowerArm.localRotation, target, armSmooth);
         }
         if (rightLowerArm != null)
         {
-            float flex  = Organic(t, elbowFlexSpeed * 1.05f, elbowFlexAmount, boneSeeds[8]);
-            float twist = Organic2(t, elbowFlexSpeed * 0.65f, elbowFlexAmount * 0.25f, boneSeeds[8]);
+            float flex  = Organic(t, elbowFlexSpeed * 1.05f * _curSpeedMult, elbowFlexAmount * _curAmpMult, boneSeeds[8]);
+            float twist = Organic2(t, elbowFlexSpeed * 0.65f * _curSpeedMult, elbowFlexAmount * 0.25f * _curAmpMult, boneSeeds[8]);
             Quaternion target = rightLowerArmRest * Quaternion.Euler(flex, twist, 0f);
             rightLowerArm.localRotation = ChaseTarget(rightLowerArm.localRotation, target, armSmooth);
         }
@@ -276,15 +286,15 @@ public class IdleAnimator : MonoBehaviour
         // ---- Hands: subtle organic fidget on multiple axes ----
         if (leftHand != null)
         {
-            float fx = Organic(t, 0.7f, 1.2f, boneSeeds[9]);
-            float fy = Organic2(t, 0.5f, 0.8f, boneSeeds[9]);
+            float fx = Organic(t, 0.7f * _curSpeedMult, 0.7f * _curAmpMult, boneSeeds[9]);
+            float fy = Organic2(t, 0.5f * _curSpeedMult, 0.5f * _curAmpMult, boneSeeds[9]);
             Quaternion target = leftHandRest * Quaternion.Euler(fx, fy, 0f);
             leftHand.localRotation = ChaseTarget(leftHand.localRotation, target, smooth);
         }
         if (rightHand != null)
         {
-            float fx = Organic(t, 0.65f, 1.2f, boneSeeds[10]);
-            float fy = Organic2(t, 0.55f, 0.8f, boneSeeds[10]);
+            float fx = Organic(t, 0.65f * _curSpeedMult, 0.7f * _curAmpMult, boneSeeds[10]);
+            float fy = Organic2(t, 0.55f * _curSpeedMult, 0.5f * _curAmpMult, boneSeeds[10]);
             Quaternion target = rightHandRest * Quaternion.Euler(fx, -fy, 0f);
             rightHand.localRotation = ChaseTarget(rightHand.localRotation, target, smooth);
         }
@@ -296,5 +306,22 @@ public class IdleAnimator : MonoBehaviour
     public void SetBaseScale(float scale)
     {
         baseScale = scale;
+    }
+
+    /// <summary>
+    /// Set the emotional state of the idle animation.
+    /// joy=lively, sorrow=subdued, angry=tense, fun=playful, neutral=default.
+    /// Transitions smoothly over ~4 seconds to avoid jarring snaps.
+    /// </summary>
+    public void SetMood(string emotion)
+    {
+        switch (emotion?.ToLower() ?? "neutral")
+        {
+            case "joy":    _targetAmpMult = 1.55f; _targetSpeedMult = 1.20f; break;
+            case "fun":    _targetAmpMult = 1.30f; _targetSpeedMult = 1.10f; break;
+            case "angry":  _targetAmpMult = 1.10f; _targetSpeedMult = 1.30f; break;
+            case "sorrow": _targetAmpMult = 0.45f; _targetSpeedMult = 0.70f; break;
+            default:       _targetAmpMult = 1.00f; _targetSpeedMult = 1.00f; break;
+        }
     }
 }

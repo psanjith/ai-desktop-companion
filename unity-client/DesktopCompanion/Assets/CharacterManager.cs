@@ -95,15 +95,15 @@ public class CharacterManager : MonoBehaviour
                 : EmoteAnimator.CharacterStyle.Expressive;
 
         // Tune idle animation amplitude to match personality.
-        // Luna defaults (after tuning pass): headTilt=2.0, headTurn=3.0, sway=1.2, armSway=0.8
-        // Ren is ~50% on tilt/turn and ~40% on sway/arm to stay composed and deliberate.
+        // Luna defaults (SetupIdleAnimation): headTilt=1.8, headTurn=2.5, sway=1.0, armSway=0.7
+        // Ren is ~45% on tilt/turn and ~40% on sway/arm — composed and deliberate.
         var idleAnim = currentModel.GetComponent<IdleAnimator>();
         if (idleAnim != null && isReserved)
         {
-            idleAnim.headTiltAmount = 1.0f; // Luna=2.0  — Ren barely tilts his head
-            idleAnim.headTurnAmount = 1.8f; // Luna=3.0  — Ren looks around less
-            idleAnim.swayAmount     = 0.5f; // Luna=1.2  — Ren stands more composed
-            idleAnim.armSwayAmount  = 0.3f; // Luna=0.8  — Ren's arms are stiller at rest
+            idleAnim.headTiltAmount = 0.8f;  // Luna=1.8 — Ren barely tilts his head
+            idleAnim.headTurnAmount = 1.1f;  // Luna=2.5 — Ren looks around less
+            idleAnim.swayAmount     = 0.4f;  // Luna=1.0 — Ren stands more composed
+            idleAnim.armSwayAmount  = 0.25f; // Luna=0.7 — Ren's arms are stiller at rest
         }
 
         currentCharacterIndex = index;
@@ -178,6 +178,12 @@ public class CharacterManager : MonoBehaviour
         return currentModel.GetComponent<FaceAnimator>();
     }
 
+    public IdleAnimator GetIdleAnimator()
+    {
+        if (currentModel == null) return null;
+        return currentModel.GetComponent<IdleAnimator>();
+    }
+
     public PoseManager GetPoseManager()
     {
         if (currentModel == null) return null;
@@ -193,23 +199,21 @@ public class CharacterManager : MonoBehaviour
         var idle = model.AddComponent<IdleAnimator>();
         if (idle != null)
         {
-            // Whole-body motion
-            idle.bobAmount = 0.04f;
-            idle.bobSpeed = 1.2f;
-            idle.breatheAmount = 0.008f;
-            idle.breatheSpeed = 2.5f;
-
-            // Bone-level idle (spine sway, head look-around, arm micro-movement)
-            idle.swayAmount = 3f;
-            idle.swaySpeed = 0.6f;
-            idle.weightShiftAmount = 2f;
-            idle.weightShiftSpeed = 0.4f;
-            idle.headTiltAmount = 4f;
-            idle.headTiltSpeed = 0.35f;
-            idle.headTurnAmount = 6f;
-            idle.headTurnSpeed = 0.25f;
-            idle.armSwayAmount = 2f;
-            idle.armSwaySpeed = 0.8f;
+            // Luna defaults — calm and natural, not hectic
+            idle.bobAmount         = 0.010f;  // gentle up/down sway
+            idle.bobSpeed          = 0.45f;
+            idle.breatheAmount     = 0.002f;
+            idle.breatheSpeed      = 0.65f;
+            idle.swayAmount        = 1.0f;    // subtle body sway
+            idle.swaySpeed         = 0.20f;
+            idle.weightShiftAmount = 0.7f;
+            idle.weightShiftSpeed  = 0.12f;
+            idle.headTiltAmount    = 1.8f;    // gentle head tilt
+            idle.headTiltSpeed     = 0.11f;
+            idle.headTurnAmount    = 2.5f;    // occasional look-around
+            idle.headTurnSpeed     = 0.07f;
+            idle.armSwayAmount     = 0.7f;
+            idle.armSwaySpeed      = 0.22f;
         }
 
         // Add emote animator for LLM-triggered animations

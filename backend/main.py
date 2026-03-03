@@ -383,6 +383,60 @@ def speak():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/speak/stop", methods=["POST"])
+def speak_stop():
+    """Kill any in-progress TTS speech immediately."""
+    global _speak_proc
+    import sys
+    if sys.platform != "darwin":
+        return jsonify({"ok": False, "note": "TTS only supported on macOS"})
+    if _speak_proc and _speak_proc.poll() is None:
+        _speak_proc.terminate()
+        _speak_proc = None
+    return jsonify({"ok": True})
+
+
+@app.route("/idle", methods=["GET"])
+def idle_message():
+    """Generate a short proactive check-in message for a character who hasn't spoken in a while."""
+    try:
+        character = request.args.get("character", "female_default")
+        with open(PERSONALITIES_PATH, "r") as f:
+            all_personalities = json.load(f)
+        personality = all_personalities.get(character)
+        if not personality:
+            personality = list(all_personalities.values())[0]
+        char_name  = personality.get("name", "Companion")
+        quirks     = personality.get("quirks", "")
+        emote_list = personality.get("emote_list", "*nods* *shrugs* *tilts head*")
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    f"Your name is {char_name}. You are an anime-style desktop companion.\n"
+                    f"Tone: {personality['tone']}. Energy: {personality['energy']}.\n"
+                    f"Personality: {quirks}\n"
+                    f"The user hasn't said anything for a while. "
+                    f"Say something short and natural to check in — stay fully in character, "
+                    f"not like an assistant. ONE sentence max. "
+                    f"Include exactly 1 emote from: {emote_list}"
+                )
+            },
+            {"role": "user", "content": "[idle check-in]"}
+        ]
+        response = _llm_call(messages)
+        raw = _reply_from_response(response)
+        emotes = re.findall(r'\*([^*]+)\*', raw)
+        clean  = re.sub(r'\*[^*]+\*', '', raw).strip()
+        clean  = re.sub(r'\s{2,}', ' ', clean).strip()
+        emotion = detect_emotion(clean, emotes)
+        return jsonify({"reply": clean, "emotes": emotes, "emotion": emotion})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/character", methods=["GET"])
 def character_info():
     """Return personality info for a character (used by Unity for display name)."""

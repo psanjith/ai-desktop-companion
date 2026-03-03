@@ -51,7 +51,11 @@ public class CompanionController : MonoBehaviour
     private TMP_Text micLabel;         // ref for "MIC" / "REC" label updates
     private Button _sendBtn;           // ref to lock/unlock during streaming
     private Image  _statusDot;         // green/red connection indicator
+    private Image  _bubbleBgImage;     // cached speech bubble background for mood tinting
     private const string HealthUrl = "http://127.0.0.1:5001/character";
+
+    private float  _lastInteractionTime;
+    private const float ProactiveIdleDelay = 300f;  // 5 min silence → character speaks up
 
     // Exposed for VoiceInputManager
     public Image  MicButtonImage    => micButtonImage;
@@ -85,6 +89,10 @@ public class CompanionController : MonoBehaviour
 
         // Start periodic backend health-check
         StartCoroutine(HealthCheckLoop());
+
+        // Proactive idle messages — character speaks up after 5 min of silence
+        _lastInteractionTime = Time.time;
+        StartCoroutine(ProactiveMessageLoop());
     }
 
     // ── Speech bubble ────────────────────────────────────────────────────────
@@ -98,9 +106,8 @@ public class CompanionController : MonoBehaviour
         if (speechBubbleText != null) speechBubbleText.text = text;
         if (speechBubble == null) return;
 
-        // Make sure it's fully opaque before showing
-        var img = speechBubble.GetComponent<Image>();
-        if (img != null) img.color = new Color(img.color.r, img.color.g, img.color.b, 1f);
+        // Reset to default tint + full opacity before showing
+        if (_bubbleBgImage != null) _bubbleBgImage.color = new Color(BgBubble.r, BgBubble.g, BgBubble.b, 1f);
         if (speechBubbleText != null)
             speechBubbleText.color = new Color(TextPrimary.r, TextPrimary.g, TextPrimary.b, 1f);
 
@@ -141,13 +148,13 @@ public class CompanionController : MonoBehaviour
 
         if (speechBubble == null) yield break;
 
-        var img  = speechBubble.GetComponent<Image>();
         float elapsed = 0f;
         while (elapsed < BubbleFadeTime)
         {
             elapsed += Time.deltaTime;
             float alpha = Mathf.Lerp(1f, 0f, elapsed / BubbleFadeTime);
-            if (img != null) img.color = new Color(img.color.r, img.color.g, img.color.b, alpha);
+            if (_bubbleBgImage != null)
+                _bubbleBgImage.color = new Color(_bubbleBgImage.color.r, _bubbleBgImage.color.g, _bubbleBgImage.color.b, alpha);
             if (speechBubbleText != null)
                 speechBubbleText.color = new Color(TextPrimary.r, TextPrimary.g, TextPrimary.b, alpha);
             yield return null;
@@ -155,7 +162,8 @@ public class CompanionController : MonoBehaviour
 
         speechBubble.SetActive(false);
         // Restore full opacity so it looks right next time it appears
-        if (img != null) img.color = new Color(img.color.r, img.color.g, img.color.b, 1f);
+        if (_bubbleBgImage != null)
+            _bubbleBgImage.color = new Color(_bubbleBgImage.color.r, _bubbleBgImage.color.g, _bubbleBgImage.color.b, 1f);
         if (speechBubbleText != null)
             speechBubbleText.color = new Color(TextPrimary.r, TextPrimary.g, TextPrimary.b, 1f);
         _bubbleDismissTimer = null;
@@ -175,6 +183,7 @@ public class CompanionController : MonoBehaviour
         var bg = speechBubble.GetComponent<Image>() ?? speechBubble.AddComponent<Image>();
         bg.color = BgBubble;
         MakeRounded(bg);
+        _bubbleBgImage = bg;  // cache for mood tinting
 
         var bubbleShadow = speechBubble.GetComponent<Shadow>() ?? speechBubble.AddComponent<Shadow>();
         bubbleShadow.effectColor    = new Color(0f, 0f, 0f, 0.35f);
@@ -696,11 +705,14 @@ public class CompanionController : MonoBehaviour
         string message = userInputField.text.Trim();
         if (string.IsNullOrEmpty(message)) return;
         userInputField.text = "";
+        _lastInteractionTime = Time.time;
         StartCoroutine(SendToAI(message));
     }
 
     IEnumerator SendToAI(string message)
     {
+        StopSpeech(); // interrupt any ongoing TTS before processing new message
+
         // Show animated loading dots while waiting for the first token.
         // Cancel any running dismiss timer but do NOT start a new one; the bubble must stay
         // until the response arrives (which can take several seconds on local Ollama).
@@ -804,6 +816,7 @@ public class CompanionController : MonoBehaviour
                                             .Replace(safeReply, @"\s{2,}", " ").Trim();
                                         if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
                                         ShowBubble(safeReply);
+                                        TintBubble(done.emotion);
                                         StartCoroutine(SpeakReply(safeReply, charName));
                                     }
                                     // Stop talking mouth
@@ -995,6 +1008,11 @@ public class CompanionController : MonoBehaviour
             faceAnimator.SetEmotion(emotion);
         }
 
+        // Mood-reactive idle — smoothly shift ambient motion to match emotion
+        var idleAnim = CharacterManager.Instance?.GetIdleAnimator();
+        if (idleAnim != null)
+            idleAnim.SetMood(emotion);
+
         // ALSO trigger body animation from emotion as a GUARANTEED fallback.
         // Uses a wait-until-ready loop instead of a simple delay — ensures it always fires.
         var emoteAnimator = CharacterManager.Instance.GetEmoteAnimator();
@@ -1021,6 +1039,86 @@ public class CompanionController : MonoBehaviour
         emoteAnimator.PlayEmotionAnimation(emotion);
     }
 
+    /// <summary>
+    /// Subtly tint the speech bubble background based on detected emotion.
+    /// joy=warm rose, sorrow=cool blue, angry=amber, fun=soft violet, neutral=default navy.
+    /// </summary>
+    private void TintBubble(string emotion)
+    {
+        if (_bubbleBgImage == null) return;
+        Color tint;
+        switch (emotion?.ToLower() ?? "neutral")
+        {
+            case "joy":    tint = new Color(0.12f, 0.07f, 0.10f, 0.90f); break; // warm rose
+            case "fun":    tint = new Color(0.10f, 0.07f, 0.13f, 0.90f); break; // soft violet
+            case "angry":  tint = new Color(0.13f, 0.09f, 0.05f, 0.90f); break; // amber
+            case "sorrow": tint = new Color(0.05f, 0.07f, 0.13f, 0.90f); break; // cool blue
+            default:       tint = BgBubble;                               break;
+        }
+        _bubbleBgImage.color = tint;
+    }
+
+    /// <summary>
+    /// Fire-and-forget: stop any in-progress TTS by posting to /speak/stop.
+    /// </summary>
+    private void StopSpeech()
+    {
+        StartCoroutine(PostSpeakStop());
+    }
+
+    private IEnumerator PostSpeakStop()
+    {
+        using (UnityWebRequest req = new UnityWebRequest("http://127.0.0.1:5001/speak/stop", "POST"))
+        {
+            req.uploadHandler   = new UploadHandlerRaw(new byte[0]);
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/json");
+            yield return req.SendWebRequest();
+        }
+    }
+
+    /// <summary>
+    /// Checks every 30s whether the user has been silent for ProactiveIdleDelay seconds.
+    /// If so, fetches a short in-character check-in message and shows/speaks it.
+    /// </summary>
+    private IEnumerator ProactiveMessageLoop()
+    {
+        yield return new WaitForSeconds(30f); // initial grace period
+        while (true)
+        {
+            yield return new WaitForSeconds(30f);
+            if (_isStreaming) continue;
+            if (Time.time - _lastInteractionTime < ProactiveIdleDelay) continue;
+            string charName = CharacterManager.Instance != null
+                ? CharacterManager.Instance.GetCurrentCharacterName()
+                : "female_default";
+            yield return SendProactiveMessage(charName);
+        }
+    }
+
+    private IEnumerator SendProactiveMessage(string charName)
+    {
+        string url = $"http://127.0.0.1:5001/idle?character={charName}";
+        using (UnityWebRequest req = UnityWebRequest.Get(url))
+        {
+            req.timeout = 8;
+            yield return req.SendWebRequest();
+            if (req.result != UnityWebRequest.Result.Success) yield break;
+            try
+            {
+                var resp = JsonUtility.FromJson<ChatResponse>(req.downloadHandler.text);
+                if (resp == null || string.IsNullOrEmpty(resp.reply)) yield break;
+                ShowBubble(resp.reply);
+                TintBubble(resp.emotion);
+                StartCoroutine(SpeakReply(resp.reply, charName));
+                if (resp.emotes != null && resp.emotes.Length > 0)
+                    TriggerEmotes(resp.emotes);
+                _lastInteractionTime = Time.time; // reset so we don't fire again immediately
+            }
+            catch { /* ignore malformed response */ }
+        }
+    }
+
     [System.Serializable]
     private class ChatRequest
     {
@@ -1033,6 +1131,7 @@ public class CompanionController : MonoBehaviour
     {
         public string reply;
         public string[] emotes;
+        public string emotion;
     }
 
     [System.Serializable]
