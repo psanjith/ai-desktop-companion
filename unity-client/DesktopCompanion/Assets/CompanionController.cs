@@ -16,12 +16,10 @@ public class CompanionController : MonoBehaviour
     public GameObject sendButton;
     public GameObject switchButton;
 
-    private string apiUrl = "http://127.0.0.1:5001/chat";
     private string streamUrl = "http://127.0.0.1:5001/chat/stream";
 
     // Text chat toggle
     private bool textChatVisible = false;
-    private bool hasPendingResponse = false; // true when speech bubble has content to show
 
     // Speech bubble auto-dismiss
     private Coroutine _bubbleDismissTimer;
@@ -558,7 +556,6 @@ public class CompanionController : MonoBehaviour
             // Clear the speech bubble when switching characters
             if (speechBubbleText != null)
                 speechBubbleText.text = "";
-            hasPendingResponse = false;
             HideBubble(); // cancels _bubbleDismissTimer + hides bubble
 
             UpdateCharacterNameUI();
@@ -613,7 +610,7 @@ public class CompanionController : MonoBehaviour
         // Cancel any running dismiss timer but do NOT start a new one; the bubble must stay
         // until the response arrives (which can take several seconds on local Ollama).
         if (speechBubbleText != null) speechBubbleText.text = "...";
-        hasPendingResponse = true;
+
         if (speechBubble != null)
         {
             var loadImg = speechBubble.GetComponent<Image>();
