@@ -1194,57 +1194,57 @@ public class EmoteAnimator : MonoBehaviour
             Quaternion headRest  = head  != null ? head.localRotation  : Quaternion.identity;
             Quaternion spineRest = spine != null ? spine.localRotation : Quaternion.identity;
 
-            // CONFIRMED axes from bone diagnostic:
-            //   RightUpperArm +X world → DOWN   ∴ -X raises the arm UP
-            //   RightUpperArm +Y world → LEFT   ∴ +Y swings arm forward/outward (away from body)
-            //   RightUpperArm +Z world → BACK   ∴ Z is the roll axis along arm — don't use for raise
+            // CONFIRMED bone axes (from diagnostic):
+            //   UpperArm +X → DOWN   ∴ -X raises the arm UP
+            //   UpperArm +Y → LEFT   ∴ -Y pulls the arm FORWARD (in front of body)
+            //   UpperArm +Z → BACK   ∴ roll axis — not used
             //
-            // Wave pose: arm raised to ~shoulder height, elbow naturally following.
-            //   -60 X  = arm up (60° worth of upward rotation)
-            //   +30 Y  = arm swung forward so it faces the viewer, not straight to the side
-            Quaternion armRaised = armRest * Quaternion.Euler(-60f, 30f, 0f);
+            // Goal: elbow bent upward, forearm vertical, palm facing viewer.
+            //   Upper arm: -90 X (straight up) -30 Y (swing forward so elbow is in front, not to side)
+            Quaternion armRaised = armRest * Quaternion.Euler(-90f, -30f, 0f);
 
-            // Lower arm: -X also raises the forearm (same axis direction).
-            // Small negative X keeps the elbow slightly bent without collapsing.
-            Quaternion lowerBent = lowerRest * Quaternion.Euler(-20f, 0f, 0f);
+            // LowerArm +X → DOWN (same direction as upper arm at rest).
+            // At the raised position the local frame has rotated, so -X on lower arm
+            // bends the elbow so the forearm points further UP / forward.
+            // +80 X opens the elbow so the forearm is roughly vertical (bent ~90° at elbow).
+            Quaternion lowerBent = lowerRest * Quaternion.Euler(80f, 0f, 0f);
 
-            // Head tilts slightly toward the waving arm (its +Z is BACK so don't use it;
-            // use the head's own local axes — small Y turn looks natural).
-            Quaternion headTilt  = headRest  * Quaternion.Euler(0f, -10f, 0f);
-            Quaternion spineLean = spineRest * Quaternion.Euler(0f, 0f, -3f);
+            Quaternion headTilt  = headRest  * Quaternion.Euler(0f, -12f, 0f); // look toward raised arm
+            Quaternion spineLean = spineRest * Quaternion.Euler(0f,  0f, -3f);
 
-            // Hand wave: hand +X → DOWN/LEFT, so ±X rocks the hand side-to-side as seen by viewer.
-            Quaternion handWaveA = handRest * Quaternion.Euler( 25f, 0f, 0f);
-            Quaternion handWaveB = handRest * Quaternion.Euler(-25f, 0f, 0f);
+            // Hand wave: ±X rocks the palm left/right (confirmed: hand +X → DOWN/LEFT).
+            // Positive X tilts palm one way, negative the other — visible side-to-side sway.
+            Quaternion handWaveA = handRest * Quaternion.Euler( 30f, 0f, 0f);
+            Quaternion handWaveB = handRest * Quaternion.Euler(-30f, 0f, 0f);
 
-            // Small windup (tiny +X = slight drop) before the raise
-            Quaternion armWindup = armRest * Quaternion.Euler(5f, 0f, 0f);
+            // Tiny windup drop before the raise
+            Quaternion armWindup = armRest * Quaternion.Euler(6f, 0f, 0f);
             yield return RotateBoneOverTime(rightArm, armRest, armWindup, 0.07f);
 
-            // Raise arm and bend elbow simultaneously
-            yield return RotateBoneOverTime(rightArm, armWindup, armRaised, 0.2f);
+            // Raise arm and set elbow simultaneously
+            yield return RotateBoneOverTime(rightArm, armWindup, armRaised, 0.22f);
             if (rightLower != null) rightLower.localRotation = lowerBent;
             if (head  != null) head.localRotation  = headTilt;
             if (spine != null) spine.localRotation = spineLean;
 
-            // Wave: only the hand rocks side-to-side, arm is still
+            // Wave: palm sways left/right, arm is still — 3 cycles
             for (int i = 0; i < 3; i++)
             {
                 if (rightHand != null)
                     yield return RotateBoneOverTime(rightHand, rightHand.localRotation, handWaveA, 0.11f);
                 if (rightHand != null)
-                    yield return RotateBoneOverTime(rightHand, handWaveA, handWaveB, 0.18f);
+                    yield return RotateBoneOverTime(rightHand, handWaveA, handWaveB, 0.20f);
                 if (rightHand != null)
                     yield return RotateBoneOverTime(rightHand, handWaveB, handRest, 0.11f);
             }
 
-            // Lower everything back
+            // Lower everything back smoothly
             if (rightHand  != null) rightHand.localRotation  = handRest;
             if (rightLower != null)
-                yield return RotateBoneOverTime(rightLower, lowerBent, lowerRest, 0.15f);
+                yield return RotateBoneOverTime(rightLower, lowerBent, lowerRest, 0.18f);
             if (head  != null) yield return RotateBoneOverTime(head,  headTilt,  headRest,  0.15f);
             if (spine != null) spine.localRotation = spineRest;
-            yield return RotateBoneOverTime(rightArm, armRaised, armRest, 0.28f);
+            yield return RotateBoneOverTime(rightArm, armRaised, armRest, 0.30f);
         }
         else
         {
