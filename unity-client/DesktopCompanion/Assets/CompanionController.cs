@@ -23,6 +23,11 @@ public class CompanionController : MonoBehaviour
     // Text chat toggle
     private bool textChatVisible = false;
 
+    // Speech bubble visibility toggle — when true the bubble is fully suppressed
+    private bool _hideBubble = false;
+    private GameObject _bubbleToggleButton;
+    private TextMeshProUGUI _bubbleToggleIcon;
+
     // Speech bubble auto-dismiss
     private Coroutine _bubbleDismissTimer;
     private const float BubbleHoldTime  = 8f;  // seconds before fade starts
@@ -78,6 +83,7 @@ public class CompanionController : MonoBehaviour
         StyleSpeechBubble();
         BuildChatPanel(canvas);
         BuildToggleButton(canvas);
+        BuildBubbleToggle(canvas);
         BuildStatusDot(canvas);
 
         UpdateCharacterNameUI();
@@ -134,6 +140,7 @@ public class CompanionController : MonoBehaviour
     /// </summary>
     private void SetBubbleText(string text)
     {
+        if (_hideBubble) return;  // bubble suppressed by user toggle
         if (speechBubbleText == null) return;
         speechBubbleText.text  = text;
         speechBubbleText.color = new Color(TextPrimary.r, TextPrimary.g, TextPrimary.b, 1f);
@@ -533,6 +540,74 @@ public class CompanionController : MonoBehaviour
         icon.fontStyle = FontStyles.Bold;
         icon.alignment = TextAlignmentOptions.Center;
         icon.enableWordWrapping = false;
+    }
+
+    // ── Bubble visibility toggle button ──────────────────────────────────────
+    private void BuildBubbleToggle(Canvas canvas)
+    {
+        if (canvas == null) return;
+
+        _bubbleToggleButton = new GameObject("BubbleToggleButton");
+        _bubbleToggleButton.transform.SetParent(canvas.transform, false);
+
+        var rect = _bubbleToggleButton.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 0f);
+        rect.anchorMax = new Vector2(1f, 0f);
+        rect.pivot     = new Vector2(1f, 0f);
+        // Sits directly left of the Chat toggle button (which is at -12, 12, w=52)
+        rect.anchoredPosition = new Vector2(-72f, 12f);
+        rect.sizeDelta = new Vector2(36f, 36f);
+
+        var bg = _bubbleToggleButton.AddComponent<Image>();
+        bg.color = BgButton;
+        MakeRounded(bg);
+
+        var btn = _bubbleToggleButton.AddComponent<Button>();
+        var cols = btn.colors;
+        cols.normalColor      = BgButton;
+        cols.highlightedColor = new Color(0.20f, 0.22f, 0.32f, 1f);
+        cols.pressedColor     = new Color(0.27f, 0.28f, 0.38f, 1f);
+        cols.fadeDuration     = 0.08f;
+        btn.colors = cols;
+        btn.onClick.AddListener(OnToggleBubble);
+
+        var iconObj = new GameObject("Icon");
+        iconObj.transform.SetParent(_bubbleToggleButton.transform, false);
+        var iconRect = iconObj.AddComponent<RectTransform>();
+        iconRect.anchorMin = Vector2.zero; iconRect.anchorMax = Vector2.one;
+        iconRect.sizeDelta = Vector2.zero; iconRect.offsetMin = Vector2.zero; iconRect.offsetMax = Vector2.zero;
+
+        _bubbleToggleIcon = iconObj.AddComponent<TextMeshProUGUI>();
+        _bubbleToggleIcon.text      = "💬";
+        _bubbleToggleIcon.fontSize  = 14f;
+        _bubbleToggleIcon.alignment = TextAlignmentOptions.Center;
+        _bubbleToggleIcon.enableWordWrapping = false;
+    }
+
+    private void OnToggleBubble()
+    {
+        _hideBubble = !_hideBubble;
+
+        // Hide the bubble immediately when suppressed
+        if (_hideBubble)
+        {
+            if (_bubbleDismissTimer != null) { StopCoroutine(_bubbleDismissTimer); _bubbleDismissTimer = null; }
+            if (speechBubble != null) speechBubble.SetActive(false);
+        }
+
+        // Update button appearance: dimmed + strikethrough feel when hidden
+        if (_bubbleToggleButton != null)
+        {
+            var bg = _bubbleToggleButton.GetComponent<Image>();
+            if (bg != null)
+                bg.color = _hideBubble
+                    ? new Color(0.22f, 0.10f, 0.10f, 0.90f)  // dim red tint = bubble off
+                    : BgButton;                                // normal
+        }
+        if (_bubbleToggleIcon != null)
+            _bubbleToggleIcon.color = _hideBubble
+                ? new Color(0.55f, 0.25f, 0.25f, 1f)   // muted red
+                : TextPrimary;
     }
 
     // ── Status dot ────────────────────────────────────────────────────────────
