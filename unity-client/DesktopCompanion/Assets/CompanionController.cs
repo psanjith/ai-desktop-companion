@@ -691,6 +691,10 @@ public class CompanionController : MonoBehaviour
 
         // Speech bubble is an independent HUD element — don't touch it here
 
+            // Bubble toggle also hides when the panel is open — it sits next to the Chat button
+            if (_bubbleToggleButton != null)
+                _bubbleToggleButton.SetActive(!visible);
+
         // Focus input when opening
         if (visible && userInputField != null)
         {
