@@ -3,6 +3,8 @@ import json
 import os
 import re
 import threading
+import tempfile
+import urllib.request
 from flask import Flask, request, jsonify, Response, stream_with_context
 
 # Pre-load Whisper model once at startup — avoids ~2s reload on every /transcribe call
@@ -91,6 +93,31 @@ def _parse_emotion_tag(text: str):
     if m:
         return m.group(1).lower(), _EMOTION_RE.sub('', text).strip()
     return None, text
+
+
+def _clean_tts_text(text: str) -> str:
+    """Light cleanup for speech synthesis while keeping natural phrasing."""
+    if not text:
+        return ""
+    # Strip control tags if any leak through
+    cleaned = _EMOTION_RE.sub("", text)
+    cleaned = re.sub(r'\*[^*]+\*', '', cleaned)
+    # Keep punctuation/prosody cues; only normalize whitespace
+    cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip()
+    return cleaned
+
+
+def _load_personalities():
+    with open(PERSONALITIES_PATH, "r") as f:
+        return json.load(f)
+
+
+def _get_personality(character: str):
+    all_personalities = _load_personalities()
+    personality = all_personalities.get(character)
+    if not personality:
+        personality = list(all_personalities.values())[0]
+    return personality
 
 
 # ── Long-term user facts ──────────────────────────────────────────────────────
@@ -470,17 +497,88 @@ def get_facts():
 
 # Process handle so we can kill previous speech before starting new one
 _speak_proc = None
+_speak_audio_path = None
+
+
+def _cleanup_audio_file():
+    global _speak_audio_path
+    if _speak_audio_path and os.path.exists(_speak_audio_path):
+        try:
+            os.remove(_speak_audio_path)
+        except Exception:
+            pass
+    _speak_audio_path = None
+
+
+def _voice_profile_for(character: str):
+    personality = _get_personality(character)
+    tts = personality.get("tts", {})
+    provider = (tts.get("provider") or _config.get("tts_provider") or "macos").lower()
+    return personality, tts, provider
+
+
+def _speak_macos(text: str, character: str, tts: dict):
+    global _speak_proc
+    import subprocess
+
+    fallback_voice = "Samantha" if "female" in character else "Daniel"
+    voice = tts.get("macos_voice", fallback_voice)
+    rate = int(tts.get("rate", 175))
+    _speak_proc = subprocess.Popen(["say", "-v", voice, "-r", str(rate), text])
+    return {"provider": "macos", "voice": voice, "rate": rate}
+
+
+def _speak_elevenlabs(text: str, tts: dict):
+    global _speak_proc, _speak_audio_path
+    import subprocess
+
+    api_key = tts.get("elevenlabs_api_key") or _config.get("elevenlabs_api_key") or os.environ.get("ELEVENLABS_API_KEY")
+    voice_id = tts.get("elevenlabs_voice_id")
+    if not api_key or not voice_id:
+        raise ValueError("ElevenLabs is selected, but API key or voice id is missing")
+
+    payload = {
+        "text": text,
+        "model_id": tts.get("elevenlabs_model", "eleven_multilingual_v2"),
+        "voice_settings": {
+            "stability": float(tts.get("stability", 0.35)),
+            "similarity_boost": float(tts.get("similarity_boost", 0.85)),
+            "style": float(tts.get("style", 0.35)),
+            "use_speaker_boost": bool(tts.get("use_speaker_boost", True)),
+        },
+    }
+
+    req = urllib.request.Request(
+        url=f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "xi-api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=25) as resp:
+        audio_bytes = resp.read()
+
+    _cleanup_audio_file()
+    fd, path = tempfile.mkstemp(prefix="companion_tts_", suffix=".mp3")
+    with os.fdopen(fd, "wb") as f:
+        f.write(audio_bytes)
+    _speak_audio_path = path
+
+    _speak_proc = subprocess.Popen(["afplay", path])
+    return {"provider": "elevenlabs", "voice_id": voice_id}
 
 
 @app.route("/speak", methods=["POST"])
 def speak():
-    """Speak text using macOS built-in TTS (non-blocking, macOS only)."""
+    """Speak text with per-character voice profiles (ElevenLabs or macOS fallback)."""
     global _speak_proc
-    import subprocess
     import sys
     try:
         data = request.get_json() or {}
-        text = data.get("text", "").strip()
+        text = _clean_tts_text(data.get("text", ""))
         character = data.get("character", "female_default")
         if not text:
             return jsonify({"ok": False, "error": "No text"}), 400
@@ -492,13 +590,23 @@ def speak():
         # Kill previous speech if still running
         if _speak_proc and _speak_proc.poll() is None:
             _speak_proc.terminate()
+        _cleanup_audio_file()
 
-        # Pick voice by character — Samantha (female, natural) or Alex (male)
-        voice = "Samantha" if "female" in character else "Alex"
+        _, tts, provider = _voice_profile_for(character)
 
-        # Launch non-blocking (fire and forget)
-        _speak_proc = subprocess.Popen(["say", "-v", voice, "-r", "175", text])
-        return jsonify({"ok": True})
+        # Prefer profile provider, but gracefully fall back to high-quality local voice
+        used = None
+        if provider == "elevenlabs":
+            try:
+                used = _speak_elevenlabs(text, tts)
+            except Exception as exc:
+                print(f"[TTS] ElevenLabs failed, falling back to macOS voice: {exc}")
+                used = _speak_macos(text, character, tts)
+                used["fallback_reason"] = str(exc)
+        else:
+            used = _speak_macos(text, character, tts)
+
+        return jsonify({"ok": True, "tts": used})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -513,6 +621,7 @@ def speak_stop():
     if _speak_proc and _speak_proc.poll() is None:
         _speak_proc.terminate()
         _speak_proc = None
+    _cleanup_audio_file()
     return jsonify({"ok": True})
 
 
