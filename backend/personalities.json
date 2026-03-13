@@ -11,11 +11,11 @@
       "provider": "elevenlabs",
       "macos_voice": "Samantha",
       "rate": 190,
-      "elevenlabs_voice_id": "cgSgspJ2msm6clMCkdW9",
-      "elevenlabs_model": "eleven_multilingual_v2",
-      "stability": 0.28,
-      "similarity_boost": 0.9,
-      "style": 0.4,
+      "elevenlabs_voice_id": "FGY2WhTYpPnrIDTdsKH5",
+      "elevenlabs_model": "eleven_turbo_v2_5",
+      "stability": 0.22,
+      "similarity_boost": 0.88,
+      "style": 0.62,
       "use_speaker_boost": true
     }
   },
@@ -31,11 +31,11 @@
       "provider": "elevenlabs",
       "macos_voice": "Daniel",
       "rate": 165,
-      "elevenlabs_voice_id": "CwhRBWXzGAHq8TQ4Fs17",
-      "elevenlabs_model": "eleven_multilingual_v2",
-      "stability": 0.45,
-      "similarity_boost": 0.85,
-      "style": 0.2,
+      "elevenlabs_voice_id": "SOYHLrjzK2X1ezoPC6cr",
+      "elevenlabs_model": "eleven_turbo_v2_5",
+      "stability": 0.3,
+      "similarity_boost": 0.9,
+      "style": 0.52,
       "use_speaker_boost": true
     }
   }
