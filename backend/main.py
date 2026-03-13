@@ -64,7 +64,7 @@ def _llm_call(messages, stream=False):
         )
     client = _groq_client if _PROVIDER == "groq" else _openai_client
     return client.chat.completions.create(
-        model=_MODEL, messages=messages, max_tokens=80, temperature=0.8, stream=stream
+        model=_MODEL, messages=messages, max_tokens=120, temperature=0.8, stream=stream
     )
 
 

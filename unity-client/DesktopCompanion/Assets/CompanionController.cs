@@ -813,6 +813,8 @@ public class CompanionController : MonoBehaviour
                                         string safeReply = System.Text.RegularExpressions.Regex
                                             .Replace(done.reply, @"\*[^*]+\*", "");
                                         safeReply = System.Text.RegularExpressions.Regex
+                                            .Replace(safeReply, @"\[e:[a-z]+\]", "");
+                                        safeReply = System.Text.RegularExpressions.Regex
                                             .Replace(safeReply, @"\s{2,}", " ").Trim();
                                         if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
                                         ShowBubble(safeReply);
@@ -866,6 +868,9 @@ public class CompanionController : MonoBehaviour
                                         // Also hide any incomplete emote still being typed *like thi
                                         display = System.Text.RegularExpressions.Regex.Replace(
                                             display, @"\*[^*]*$", "");
+                                        // Strip LLM emotion tags [e:joy] etc — must not appear as text
+                                        display = System.Text.RegularExpressions.Regex.Replace(
+                                            display, @"\[e:[a-z]+\]", "");
                                         display = System.Text.RegularExpressions.Regex.Replace(
                                             display, @"\s{2,}", " ").Trim();
                                         if (display.Length > 0)
