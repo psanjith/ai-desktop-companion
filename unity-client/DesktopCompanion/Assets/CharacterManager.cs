@@ -17,8 +17,20 @@ public class CharacterManager : MonoBehaviour
     public float scaleStep = 0.2f;
     private float currentScale = 1.0f;
 
+    [Header("Screen Presence")]
+    [Tooltip("Makes the character subtly follow the cursor and perch on screen edges over time.")]
+    public bool enableScreenPresence = true;
+    public float cursorFollowRangeX = 0.22f;
+    public float perchRangeX = 0.30f;
+    public float presenceSmoothing = 2.8f;
+
     // Loaded character
     private GameObject currentModel;
+    private Vector3 _managerBaseLocalPos;
+    private float _perchTargetX = 0f;
+    private float _nextPerchChangeAt = 0f;
+    private Vector3 _lastMousePos;
+    private float _lastMouseMoveAt = 0f;
 
     // Singleton for easy access
     public static CharacterManager Instance { get; private set; }
@@ -35,6 +47,10 @@ public class CharacterManager : MonoBehaviour
 
     void Start()
     {
+        _managerBaseLocalPos = transform.localPosition;
+        _lastMousePos = Input.mousePosition;
+        _lastMouseMoveAt = Time.time;
+
         if (characterPrefabs == null || characterPrefabs.Length == 0)
         {
             Debug.LogWarning("CharacterManager: No character prefabs assigned! Drag them in the Inspector.");
@@ -51,6 +67,40 @@ public class CharacterManager : MonoBehaviour
 
         Debug.Log($"CharacterManager: {characterPrefabs.Length} character(s) available");
         LoadCharacter(currentCharacterIndex);
+    }
+
+    void Update()
+    {
+        if (!enableScreenPresence || currentModel == null) return;
+
+        // Track user activity from mouse movement to avoid fighting active interaction.
+        Vector3 mp = Input.mousePosition;
+        if ((mp - _lastMousePos).sqrMagnitude > 4f)
+        {
+            _lastMouseMoveAt = Time.time;
+            _lastMousePos = mp;
+        }
+
+        if (Time.time >= _nextPerchChangeAt && Time.time - _lastMouseMoveAt > 4f)
+            ChooseNextPerch();
+
+        float halfW = Mathf.Max(1f, Screen.width * 0.5f);
+        float nx = Mathf.Clamp((Input.mousePosition.x - halfW) / halfW, -1f, 1f);
+
+        // Blend persistent perch target with cursor following so it feels intentional, not twitchy.
+        float followX = nx * cursorFollowRangeX;
+        float targetX = _managerBaseLocalPos.x + (_perchTargetX * 0.55f) + (followX * 0.45f);
+
+        Vector3 p = transform.localPosition;
+        p.x = Mathf.Lerp(p.x, targetX, 1f - Mathf.Exp(-presenceSmoothing * Time.deltaTime));
+        transform.localPosition = p;
+    }
+
+    private void ChooseNextPerch()
+    {
+        float[] anchors = new float[] { -perchRangeX, 0f, perchRangeX };
+        _perchTargetX = anchors[Random.Range(0, anchors.Length)] + Random.Range(-0.04f, 0.04f);
+        _nextPerchChangeAt = Time.time + Random.Range(18f, 36f);
     }
 
     public void LoadCharacter(int index)
@@ -78,6 +128,11 @@ public class CharacterManager : MonoBehaviour
         currentModel.transform.localPosition = Vector3.zero;
         currentModel.transform.localRotation = Quaternion.identity;
         currentModel.transform.localScale = Vector3.one * currentScale;
+
+        // Reset presence drift each time we swap character.
+        transform.localPosition = _managerBaseLocalPos;
+        _perchTargetX = 0f;
+        _nextPerchChangeAt = Time.time + Random.Range(8f, 16f);
 
         // Add idle animation
         SetupIdleAnimation(currentModel);

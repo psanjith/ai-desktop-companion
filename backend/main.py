@@ -5,6 +5,7 @@ import re
 import threading
 import tempfile
 import urllib.request
+import subprocess
 from flask import Flask, request, jsonify, Response, stream_with_context
 
 # Pre-load Whisper model once at startup — avoids ~2s reload on every /transcribe call
@@ -105,6 +106,74 @@ def _clean_tts_text(text: str) -> str:
     # Keep punctuation/prosody cues; only normalize whitespace
     cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip()
     return cleaned
+
+
+def _clamp01(x: float) -> float:
+    return max(0.0, min(1.0, float(x)))
+
+
+def _voice_settings_for_emotion(tts: dict, emotion: str):
+    """Emotion → small prosody offsets for more lifelike delivery."""
+    stability = float(tts.get("stability", 0.35))
+    similarity = float(tts.get("similarity_boost", 0.85))
+    style = float(tts.get("style", 0.35))
+    emo = (emotion or "neutral").lower()
+
+    if emo == "joy":
+        style += 0.10
+        stability -= 0.06
+    elif emo == "fun":
+        style += 0.14
+        stability -= 0.08
+    elif emo == "sorrow":
+        style -= 0.10
+        stability += 0.10
+    elif emo == "angry":
+        style += 0.06
+        stability += 0.03
+
+    return {
+        "stability": _clamp01(stability),
+        "similarity_boost": _clamp01(similarity),
+        "style": _clamp01(style),
+        "use_speaker_boost": bool(tts.get("use_speaker_boost", True)),
+    }
+
+
+def _get_desktop_context():
+    """Best-effort foreground app context (macOS only)."""
+    app = ""
+    title = ""
+    if os.name != "posix":
+        return {"app": app, "title": title}
+
+    try:
+        app = subprocess.check_output(
+            [
+                "osascript",
+                "-e",
+                'tell application "System Events" to get name of first process whose frontmost is true',
+            ],
+            text=True,
+            timeout=1.5,
+        ).strip()
+    except Exception:
+        app = ""
+
+    try:
+        title = subprocess.check_output(
+            [
+                "osascript",
+                "-e",
+                'tell application "System Events" to tell (first process whose frontmost is true) to get name of front window',
+            ],
+            text=True,
+            timeout=1.5,
+        ).strip()
+    except Exception:
+        title = ""
+
+    return {"app": app, "title": title}
 
 
 def _load_personalities():
@@ -517,18 +586,28 @@ def _voice_profile_for(character: str):
     return personality, tts, provider
 
 
-def _speak_macos(text: str, character: str, tts: dict):
+def _speak_macos(text: str, character: str, tts: dict, emotion: str = "neutral"):
     global _speak_proc
     import subprocess
 
     fallback_voice = "Samantha" if "female" in character else "Daniel"
     voice = tts.get("macos_voice", fallback_voice)
     rate = int(tts.get("rate", 175))
+    emo = (emotion or "neutral").lower()
+    if emo == "sorrow":
+        rate -= 12
+    elif emo == "joy":
+        rate += 10
+    elif emo == "fun":
+        rate += 14
+    elif emo == "angry":
+        rate += 4
+    rate = max(120, min(245, rate))
     _speak_proc = subprocess.Popen(["say", "-v", voice, "-r", str(rate), text])
     return {"provider": "macos", "voice": voice, "rate": rate}
 
 
-def _speak_elevenlabs(text: str, tts: dict):
+def _speak_elevenlabs(text: str, tts: dict, emotion: str = "neutral"):
     global _speak_proc, _speak_audio_path
     import subprocess
 
@@ -540,12 +619,7 @@ def _speak_elevenlabs(text: str, tts: dict):
     payload = {
         "text": text,
         "model_id": tts.get("elevenlabs_model", "eleven_multilingual_v2"),
-        "voice_settings": {
-            "stability": float(tts.get("stability", 0.35)),
-            "similarity_boost": float(tts.get("similarity_boost", 0.85)),
-            "style": float(tts.get("style", 0.35)),
-            "use_speaker_boost": bool(tts.get("use_speaker_boost", True)),
-        },
+        "voice_settings": _voice_settings_for_emotion(tts, emotion),
     }
 
     req = urllib.request.Request(
@@ -580,6 +654,7 @@ def speak():
         data = request.get_json() or {}
         text = _clean_tts_text(data.get("text", ""))
         character = data.get("character", "female_default")
+        emotion = (data.get("emotion") or "neutral").lower()
         if not text:
             return jsonify({"ok": False, "error": "No text"}), 400
 
@@ -598,15 +673,15 @@ def speak():
         used = None
         if provider == "elevenlabs":
             try:
-                used = _speak_elevenlabs(text, tts)
+                used = _speak_elevenlabs(text, tts, emotion=emotion)
             except Exception as exc:
                 print(f"[TTS] ElevenLabs failed, falling back to macOS voice: {exc}")
-                used = _speak_macos(text, character, tts)
+                used = _speak_macos(text, character, tts, emotion=emotion)
                 used["fallback_reason"] = str(exc)
         else:
-            used = _speak_macos(text, character, tts)
+            used = _speak_macos(text, character, tts, emotion=emotion)
 
-        return jsonify({"ok": True, "tts": used})
+        return jsonify({"ok": True, "tts": used, "emotion": emotion})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -635,6 +710,19 @@ def idle_message():
         personality = all_personalities.get(character)
         if not personality:
             personality = list(all_personalities.values())[0]
+        desktop_ctx = _get_desktop_context()
+        active_app = (request.args.get("app") or desktop_ctx.get("app") or "").strip()
+        active_title = (desktop_ctx.get("title") or "").strip()
+
+        app_hint = ""
+        app_l = active_app.lower()
+        if "code" in app_l or "cursor" in app_l or "xcode" in app_l:
+            app_hint = "The user appears to be coding. You can make a brief coding-friendly check-in."
+        elif "safari" in app_l or "chrome" in app_l or "firefox" in app_l or "brave" in app_l:
+            app_hint = "The user appears to be browsing. You can make a brief web-browsing-themed check-in."
+        elif "terminal" in app_l or "iterm" in app_l:
+            app_hint = "The user appears to be in terminal. You can make a brief hacker-ish check-in."
+
         char_name  = personality.get("name", "Companion")
         quirks     = personality.get("quirks", "")
         emote_list = personality.get("emote_list", "*nods* *shrugs* *tilts head*")
@@ -645,6 +733,9 @@ def idle_message():
                     f"Your name is {char_name}. You are an anime-style desktop companion.\n"
                     f"Tone: {personality['tone']}. Energy: {personality['energy']}.\n"
                     f"Personality: {quirks}\n"
+                    f"Active app: {active_app or 'unknown'}\n"
+                    f"Active window title: {active_title or 'unknown'}\n"
+                    f"{app_hint}\n"
                     f"The user hasn't said anything for a while. "
                     f"Say something short and natural to check in — stay fully in character, "
                     f"not like an assistant. ONE sentence max. "
@@ -663,6 +754,16 @@ def idle_message():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/desktop/context", methods=["GET"])
+def desktop_context():
+    """Return lightweight foreground app context to help proactive reactions."""
+    try:
+        ctx = _get_desktop_context()
+        return jsonify(ctx)
+    except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 

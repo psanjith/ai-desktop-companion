@@ -19,6 +19,7 @@ public class CompanionController : MonoBehaviour
     private string streamUrl = "http://127.0.0.1:5001/chat/stream";
     private string clearUrl  = "http://127.0.0.1:5001/memory/clear";
     private const string SpeakUrl = "http://127.0.0.1:5001/speak";
+    private const string DesktopContextUrl = "http://127.0.0.1:5001/desktop/context";
 
     // Text chat toggle
     private bool textChatVisible = false;
@@ -62,6 +63,9 @@ public class CompanionController : MonoBehaviour
 
     private float  _lastInteractionTime;
     private const float ProactiveIdleDelay = 300f;  // 5 min silence → character speaks up
+    private float _lastUserActivityTime;
+    private Vector3 _lastMousePos;
+    private float _nextProactiveAt;
 
     // Exposed for VoiceInputManager
     public Image  MicButtonImage    => micButtonImage;
@@ -100,6 +104,9 @@ public class CompanionController : MonoBehaviour
 
         // Proactive idle messages — character speaks up after 5 min of silence
         _lastInteractionTime = Time.time;
+        _lastUserActivityTime = Time.time;
+        _lastMousePos = Input.mousePosition;
+        _nextProactiveAt = Time.time + Random.Range(190f, 340f);
         StartCoroutine(ProactiveMessageLoop());
     }
 
@@ -706,6 +713,15 @@ public class CompanionController : MonoBehaviour
     /// </summary>
     void Update()
     {
+        // Track user activity continuously (for quiet-aware proactive timing)
+        if ((Input.mousePosition - _lastMousePos).sqrMagnitude > 2f)
+        {
+            _lastUserActivityTime = Time.time;
+            _lastMousePos = Input.mousePosition;
+        }
+        if (Input.anyKeyDown)
+            _lastUserActivityTime = Time.time;
+
         if (userInputField != null && userInputField.isFocused) return;
 
         // M = toggle microphone
@@ -953,7 +969,7 @@ public class CompanionController : MonoBehaviour
                                         if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
                                         ShowBubble(safeReply);
                                         TintBubble(done.emotion);
-                                        StartCoroutine(SpeakReply(safeReply, charName));
+                                        StartCoroutine(SpeakReply(safeReply, charName, done.emotion));
                                     }
                                     // Stop talking mouth
                                     if (faceAnim != null)
@@ -1064,7 +1080,7 @@ public class CompanionController : MonoBehaviour
                             if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
                             ShowBubble(safeReply);
                             TintBubble(done.emotion);
-                            StartCoroutine(SpeakReply(safeReply, charName));
+                            StartCoroutine(SpeakReply(safeReply, charName, done.emotion));
                         }
 
                         if (faceAnim != null)
@@ -1149,9 +1165,9 @@ public class CompanionController : MonoBehaviour
     /// <summary>
     /// Fire-and-forget coroutine: sends cleaned reply text to /speak for macOS TTS.
     /// </summary>
-    IEnumerator SpeakReply(string text, string character)
+    IEnumerator SpeakReply(string text, string character, string emotion = "neutral")
     {
-        string body = JsonUtility.ToJson(new SpeakRequest { text = text, character = character });
+        string body = JsonUtility.ToJson(new SpeakRequest { text = text, character = character, emotion = emotion });
         byte[] raw  = System.Text.Encoding.UTF8.GetBytes(body);
         using (UnityWebRequest req = new UnityWebRequest(SpeakUrl, "POST"))
         {
@@ -1285,13 +1301,22 @@ public class CompanionController : MonoBehaviour
         yield return new WaitForSeconds(30f); // initial grace period
         while (true)
         {
-            yield return new WaitForSeconds(30f);
+            yield return new WaitForSeconds(10f);
             if (_isStreaming) continue;
             if (Time.time - _lastInteractionTime < ProactiveIdleDelay) continue;
+            if (Time.time - _lastUserActivityTime < 45f) continue; // actively using keyboard/mouse
+
+            // Quiet hours: be less chatty late night / very early morning
+            int hour = System.DateTime.Now.Hour;
+            bool quietHours = (hour >= 23 || hour < 8);
+            if (quietHours && Time.time - _lastInteractionTime < 900f) continue;
+
+            if (Time.time < _nextProactiveAt) continue;
             string charName = CharacterManager.Instance != null
                 ? CharacterManager.Instance.GetCurrentCharacterName()
                 : "female_default";
             yield return SendProactiveMessage(charName);
+            _nextProactiveAt = Time.time + Random.Range(220f, 460f);
         }
     }
 
@@ -1309,12 +1334,31 @@ public class CompanionController : MonoBehaviour
                 if (resp == null || string.IsNullOrEmpty(resp.reply)) yield break;
                 ShowBubble(resp.reply);
                 TintBubble(resp.emotion);
-                StartCoroutine(SpeakReply(resp.reply, charName));
+                StartCoroutine(SpeakReply(resp.reply, charName, resp.emotion));
+                _lastUserActivityTime = Time.time;
                 if (resp.emotes != null && resp.emotes.Length > 0)
                     TriggerEmotes(resp.emotes);
                 _lastInteractionTime = Time.time; // reset so we don't fire again immediately
             }
-            catch { /* ignore malformed response */ }
+                // Pull lightweight desktop context from backend, then pass it into idle generation.
+                string appName = "";
+                using (UnityWebRequest ctxReq = UnityWebRequest.Get(DesktopContextUrl))
+                {
+                    ctxReq.timeout = 2;
+                    yield return ctxReq.SendWebRequest();
+                    if (ctxReq.result == UnityWebRequest.Result.Success)
+                    {
+                        try
+                        {
+                            var ctx = JsonUtility.FromJson<DesktopContextInfo>(ctxReq.downloadHandler.text);
+                            if (ctx != null) appName = ctx.app;
+                        }
+                        catch { }
+                    }
+                }
+
+                string encodedApp = UnityWebRequest.EscapeURL(appName ?? "");
+                string url = $"http://127.0.0.1:5001/idle?character={charName}&app={encodedApp}";
         }
     }
 
@@ -1324,7 +1368,7 @@ public class CompanionController : MonoBehaviour
         public string message;
         public string character;
     }
-
+        string body = JsonUtility.ToJson(new SpeakRequest { text = text, character = character, emotion = emotion });
     [System.Serializable]
     private class ChatResponse
     {
@@ -1359,6 +1403,14 @@ public class CompanionController : MonoBehaviour
     {
         public string text;
         public string character;
+        public string emotion;
+    }
+
+    [System.Serializable]
+    private class DesktopContextInfo
+    {
+        public string app;
+        public string title;
     }
 
     [System.Serializable]
