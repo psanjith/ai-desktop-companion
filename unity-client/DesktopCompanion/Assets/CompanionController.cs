@@ -27,6 +27,7 @@ public class CompanionController : MonoBehaviour
     private bool _hideBubble = false;
     private GameObject _bubbleToggleButton;
     private TextMeshProUGUI _bubbleToggleIcon;
+    private GameObject _bubbleHiddenBadge;
 
     // Speech bubble auto-dismiss
     private Coroutine _bubbleDismissTimer;
@@ -84,6 +85,7 @@ public class CompanionController : MonoBehaviour
         BuildChatPanel(canvas);
         BuildToggleButton(canvas);
         BuildBubbleToggle(canvas);
+        BuildBubbleHiddenBadge(canvas);
         BuildStatusDot(canvas);
 
         UpdateCharacterNameUI();
@@ -582,6 +584,51 @@ public class CompanionController : MonoBehaviour
         _bubbleToggleIcon.fontSize  = 14f;
         _bubbleToggleIcon.alignment = TextAlignmentOptions.Center;
         _bubbleToggleIcon.enableWordWrapping = false;
+
+        UpdateBubbleHiddenBadgeVisibility();
+    }
+
+    private void BuildBubbleHiddenBadge(Canvas canvas)
+    {
+        if (canvas == null) return;
+
+        _bubbleHiddenBadge = new GameObject("BubbleHiddenBadge");
+        _bubbleHiddenBadge.transform.SetParent(canvas.transform, false);
+
+        var rect = _bubbleHiddenBadge.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 0f);
+        rect.anchorMax = new Vector2(1f, 0f);
+        rect.pivot     = new Vector2(1f, 0f);
+        rect.anchoredPosition = new Vector2(-120f, 16f); // left of bottom-right control cluster
+        rect.sizeDelta = new Vector2(100f, 22f);
+
+        var bg = _bubbleHiddenBadge.AddComponent<Image>();
+        bg.color = new Color(0.30f, 0.12f, 0.12f, 0.88f);
+        MakeRounded(bg);
+
+        var textObj = new GameObject("Label");
+        textObj.transform.SetParent(_bubbleHiddenBadge.transform, false);
+        var textRect = textObj.AddComponent<RectTransform>();
+        textRect.anchorMin = Vector2.zero;
+        textRect.anchorMax = Vector2.one;
+        textRect.offsetMin = new Vector2(8f, 0f);
+        textRect.offsetMax = new Vector2(-8f, 0f);
+
+        var label = textObj.AddComponent<TextMeshProUGUI>();
+        label.text = "Bubble Hidden";
+        label.fontSize = 10f;
+        label.fontStyle = FontStyles.Bold;
+        label.alignment = TextAlignmentOptions.Center;
+        label.color = new Color(1f, 0.86f, 0.86f, 1f);
+        label.enableWordWrapping = false;
+
+        _bubbleHiddenBadge.SetActive(false);
+    }
+
+    private void UpdateBubbleHiddenBadgeVisibility()
+    {
+        if (_bubbleHiddenBadge == null) return;
+        _bubbleHiddenBadge.SetActive(_hideBubble && !textChatVisible);
     }
 
     private void OnToggleBubble()
@@ -608,6 +655,8 @@ public class CompanionController : MonoBehaviour
             _bubbleToggleIcon.color = _hideBubble
                 ? new Color(0.55f, 0.25f, 0.25f, 1f)   // muted red
                 : TextPrimary;
+
+        UpdateBubbleHiddenBadgeVisibility();
     }
 
     // ── Status dot ────────────────────────────────────────────────────────────
@@ -691,9 +740,11 @@ public class CompanionController : MonoBehaviour
 
         // Speech bubble is an independent HUD element — don't touch it here
 
-            // Bubble toggle also hides when the panel is open — it sits next to the Chat button
-            if (_bubbleToggleButton != null)
-                _bubbleToggleButton.SetActive(!visible);
+        // Bubble toggle also hides when the panel is open — it sits next to the Chat button
+        if (_bubbleToggleButton != null)
+            _bubbleToggleButton.SetActive(!visible);
+
+        UpdateBubbleHiddenBadgeVisibility();
 
         // Focus input when opening
         if (visible && userInputField != null)
