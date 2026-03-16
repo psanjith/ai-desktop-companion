@@ -16,10 +16,15 @@ public class CompanionController : MonoBehaviour
     public GameObject sendButton;
     public GameObject switchButton;
 
-    private string streamUrl = "http://127.0.0.1:5001/chat/stream";
-    private string clearUrl  = "http://127.0.0.1:5001/memory/clear";
-    private const string SpeakUrl = "http://127.0.0.1:5001/speak";
-    private const string DesktopContextUrl = "http://127.0.0.1:5001/desktop/context";
+    [Header("Backend")]
+    [SerializeField] private string backendBaseUrl = "http://127.0.0.1:5001";
+
+    private string streamUrl;
+    private string clearUrl;
+    private string speakUrl;
+    private string desktopContextUrl;
+    private string healthUrl;
+    private string speakStopUrl;
 
     // Text chat toggle
     private bool textChatVisible = false;
@@ -59,8 +64,6 @@ public class CompanionController : MonoBehaviour
     private Button _sendBtn;           // ref to lock/unlock during streaming
     private Image  _statusDot;         // green/red connection indicator
     private Image  _bubbleBgImage;     // cached speech bubble background for mood tinting
-    private const string HealthUrl = "http://127.0.0.1:5001/character";
-
     private float  _lastInteractionTime;
     private const float ProactiveIdleDelay = 300f;  // 5 min silence → character speaks up
     private float _lastUserActivityTime;
@@ -73,6 +76,13 @@ public class CompanionController : MonoBehaviour
 
     void Start()
     {
+        streamUrl = GetApiUrl("/chat/stream");
+        clearUrl = GetApiUrl("/memory/clear");
+        speakUrl = GetApiUrl("/speak");
+        desktopContextUrl = GetApiUrl("/desktop/context");
+        healthUrl = GetApiUrl("/character");
+        speakStopUrl = GetApiUrl("/speak/stop");
+
         // Scale Canvas with screen
         Canvas canvas = GetComponentInParent<Canvas>();
         if (canvas == null) canvas = FindObjectOfType<Canvas>();
@@ -108,6 +118,18 @@ public class CompanionController : MonoBehaviour
         _lastMousePos = Input.mousePosition;
         _nextProactiveAt = Time.time + Random.Range(190f, 340f);
         StartCoroutine(ProactiveMessageLoop());
+    }
+
+    public string GetApiUrl(string path)
+    {
+        string baseUrl = (backendBaseUrl ?? "").Trim();
+        if (string.IsNullOrEmpty(baseUrl))
+            baseUrl = "http://127.0.0.1:5001";
+
+        baseUrl = baseUrl.TrimEnd('/');
+        if (string.IsNullOrEmpty(path)) return baseUrl;
+        if (!path.StartsWith("/")) path = "/" + path;
+        return baseUrl + path;
     }
 
     // ── Speech bubble ────────────────────────────────────────────────────────
@@ -694,7 +716,7 @@ public class CompanionController : MonoBehaviour
     {
         while (true)
         {
-            using (UnityWebRequest req = UnityWebRequest.Get(HealthUrl))
+            using (UnityWebRequest req = UnityWebRequest.Get(healthUrl))
             {
                 req.timeout = 2;
                 yield return req.SendWebRequest();
@@ -824,7 +846,7 @@ public class CompanionController : MonoBehaviour
     IEnumerator FetchCharacterName()
     {
         string charId = CharacterManager.Instance.GetCurrentCharacterName();
-        string url = $"http://127.0.0.1:5001/character?id={charId}";
+        string url = GetApiUrl($"/character?id={charId}");
 
         using (UnityWebRequest req = UnityWebRequest.Get(url))
         {
@@ -1169,7 +1191,7 @@ public class CompanionController : MonoBehaviour
     {
         string body = JsonUtility.ToJson(new SpeakRequest { text = text, character = character, emotion = emotion });
         byte[] raw  = System.Text.Encoding.UTF8.GetBytes(body);
-        using (UnityWebRequest req = new UnityWebRequest(SpeakUrl, "POST"))
+        using (UnityWebRequest req = new UnityWebRequest(speakUrl, "POST"))
         {
             req.uploadHandler   = new UploadHandlerRaw(raw);
             req.downloadHandler = new DownloadHandlerBuffer();
@@ -1283,7 +1305,7 @@ public class CompanionController : MonoBehaviour
 
     private IEnumerator PostSpeakStop()
     {
-        using (UnityWebRequest req = new UnityWebRequest("http://127.0.0.1:5001/speak/stop", "POST"))
+        using (UnityWebRequest req = new UnityWebRequest(speakStopUrl, "POST"))
         {
             req.uploadHandler   = new UploadHandlerRaw(new byte[0]);
             req.downloadHandler = new DownloadHandlerBuffer();
@@ -1324,7 +1346,7 @@ public class CompanionController : MonoBehaviour
     {
         // Pull lightweight desktop context from backend, then pass it into idle generation.
         string appName = "";
-        using (UnityWebRequest ctxReq = UnityWebRequest.Get(DesktopContextUrl))
+        using (UnityWebRequest ctxReq = UnityWebRequest.Get(desktopContextUrl))
         {
             ctxReq.timeout = 2;
             yield return ctxReq.SendWebRequest();
@@ -1340,7 +1362,7 @@ public class CompanionController : MonoBehaviour
         }
 
         string encodedApp = UnityWebRequest.EscapeURL(appName ?? "");
-        string url = $"http://127.0.0.1:5001/idle?character={charName}&app={encodedApp}";
+        string url = GetApiUrl($"/idle?character={charName}&app={encodedApp}");
 
         using (UnityWebRequest req = UnityWebRequest.Get(url))
         {

@@ -12,7 +12,6 @@ using TMPro;
 public class VoiceInputManager : MonoBehaviour
 {
     // ── Config ────────────────────────────────────────────────────────────────
-    private const string TranscribeUrl = "http://127.0.0.1:5001/transcribe";
     private const int    SampleRate    = 16000;
     private const int    MaxRecordSecs = 15;
 
@@ -24,10 +23,14 @@ public class VoiceInputManager : MonoBehaviour
 
     // ── References (grabbed at runtime) ──────────────────────────────────────
     private CompanionController controller;
+    private string transcribeUrl;
 
     void Awake()
     {
         controller = GetComponent<CompanionController>();
+        transcribeUrl = controller != null
+            ? controller.GetApiUrl("/transcribe")
+            : "http://127.0.0.1:5001/transcribe";
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -113,7 +116,7 @@ public class VoiceInputManager : MonoBehaviour
         var form = new WWWForm();
         form.AddBinaryData("audio", wavBytes, "recording.wav", "audio/wav");
 
-        using (var req = UnityWebRequest.Post(TranscribeUrl, form))
+        using (var req = UnityWebRequest.Post(transcribeUrl, form))
         {
             yield return req.SendWebRequest();
 
