@@ -111,6 +111,7 @@ public class CompanionController : MonoBehaviour
     /// </summary>
     private void ShowBubble(string text)
     {
+        if (_hideBubble) return;  // bubble suppressed by user toggle
         if (speechBubbleText != null) speechBubbleText.text = text;
         if (speechBubble == null) return;
 
@@ -846,7 +847,7 @@ public class CompanionController : MonoBehaviour
         // Show animated loading dots while waiting for the first token.
         // Cancel any running dismiss timer but do NOT start a new one; the bubble must stay
         // until the response arrives (which can take several seconds on local Ollama).
-        if (speechBubble != null)
+        if (!_hideBubble && speechBubble != null)
         {
             var loadImg = speechBubble.GetComponent<Image>();
             if (loadImg != null) loadImg.color = new Color(loadImg.color.r, loadImg.color.g, loadImg.color.b, 1f);
@@ -856,7 +857,8 @@ public class CompanionController : MonoBehaviour
             speechBubble.SetActive(true);
         }
         if (_dotCoroutine != null) StopCoroutine(_dotCoroutine);
-        _dotCoroutine = StartCoroutine(AnimateThinkingDots());
+        if (!_hideBubble)
+            _dotCoroutine = StartCoroutine(AnimateThinkingDots());
 
         // Send current character so backend uses the right personality
         string charName = CharacterManager.Instance != null
