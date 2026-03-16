@@ -1369,7 +1369,7 @@ public class CompanionController : MonoBehaviour
         public string message;
         public string character;
     }
-        string body = JsonUtility.ToJson(new SpeakRequest { text = text, character = character, emotion = emotion });
+
     [System.Serializable]
     private class ChatResponse
     {
