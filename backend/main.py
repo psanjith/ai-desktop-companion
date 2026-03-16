@@ -2,19 +2,65 @@ import sqlite3
 import json
 import os
 import re
+import importlib
 from flask import Flask, request, jsonify
-from ollama import Client
+
+# LLM config (Render-friendly)
+_PROVIDER = os.environ.get("PROVIDER", "ollama").lower()
+_MODEL = os.environ.get("MODEL", "llama3.2:3b")
+_OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+_API_KEY = os.environ.get("API_KEY", "")
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PERSONALITIES_PATH = os.path.join(BASE_DIR, "personalities.json")
 MEMORY_DB_PATH = os.path.join(BASE_DIR, "memory.db")
 
-# Ollama client (faster than subprocess)
-ollama_client = Client(host="http://localhost:11434")
+# LLM client
+llm_client = None
+if _PROVIDER == "ollama":
+    Client = importlib.import_module("ollama").Client
+    llm_client = Client(host=_OLLAMA_HOST)
+elif _PROVIDER == "groq":
+    Groq = importlib.import_module("groq").Groq
+    if not _API_KEY:
+        raise ValueError("Missing API key. Set API_KEY environment variable for provider=groq")
+    llm_client = Groq(api_key=_API_KEY)
+elif _PROVIDER == "openai":
+    OpenAI = importlib.import_module("openai").OpenAI
+    if not _API_KEY:
+        raise ValueError("Missing API key. Set API_KEY environment variable for provider=openai")
+    llm_client = OpenAI(api_key=_API_KEY)
+else:
+    raise ValueError(f"Unknown PROVIDER '{_PROVIDER}'. Use ollama, groq, or openai")
+
+print(f"[Config] Provider: {_PROVIDER}  Model: {_MODEL}")
 
 # Flask app
 app = Flask(__name__)
+
+
+def _llm_chat(messages):
+    if _PROVIDER == "ollama":
+        response = llm_client.chat(
+            model=_MODEL,
+            messages=messages,
+            options={
+                "num_predict": 40,
+                "temperature": 0.8,
+                "num_ctx": 1024,
+            },
+        )
+        return response["message"]["content"].strip()
+
+    # Groq / OpenAI
+    response = llm_client.chat.completions.create(
+        model=_MODEL,
+        messages=messages,
+        max_tokens=80,
+        temperature=0.8,
+    )
+    return response.choices[0].message.content.strip()
 
 
 def get_db():
@@ -83,17 +129,8 @@ def chat(user_input, character="female_default"):
         messages.append({"role": "assistant", "content": a})
     messages.append({"role": "user", "content": user_input})
 
-    # Call local LLM via Ollama Python client
-    response = ollama_client.chat(
-        model="llama3.2:3b",
-        messages=messages,
-        options={
-            "num_predict": 40,     # Max ~40 tokens (1-2 sentences)
-            "temperature": 0.8,    # Slightly creative
-            "num_ctx": 1024,       # Smaller context window = faster
-        }
-    )
-    raw_reply = response["message"]["content"].strip()
+    # Call configured LLM provider
+    raw_reply = _llm_chat(messages)
 
     # Extract emotes like *yawns*, *blinks slowly* from reply
     emotes = re.findall(r'\*([^*]+)\*', raw_reply)
