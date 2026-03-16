@@ -1322,7 +1322,26 @@ public class CompanionController : MonoBehaviour
 
     private IEnumerator SendProactiveMessage(string charName)
     {
-        string url = $"http://127.0.0.1:5001/idle?character={charName}";
+        // Pull lightweight desktop context from backend, then pass it into idle generation.
+        string appName = "";
+        using (UnityWebRequest ctxReq = UnityWebRequest.Get(DesktopContextUrl))
+        {
+            ctxReq.timeout = 2;
+            yield return ctxReq.SendWebRequest();
+            if (ctxReq.result == UnityWebRequest.Result.Success)
+            {
+                try
+                {
+                    var ctx = JsonUtility.FromJson<DesktopContextInfo>(ctxReq.downloadHandler.text);
+                    if (ctx != null) appName = ctx.app;
+                }
+                catch { }
+            }
+        }
+
+        string encodedApp = UnityWebRequest.EscapeURL(appName ?? "");
+        string url = $"http://127.0.0.1:5001/idle?character={charName}&app={encodedApp}";
+
         using (UnityWebRequest req = UnityWebRequest.Get(url))
         {
             req.timeout = 8;
@@ -1340,25 +1359,7 @@ public class CompanionController : MonoBehaviour
                     TriggerEmotes(resp.emotes);
                 _lastInteractionTime = Time.time; // reset so we don't fire again immediately
             }
-                // Pull lightweight desktop context from backend, then pass it into idle generation.
-                string appName = "";
-                using (UnityWebRequest ctxReq = UnityWebRequest.Get(DesktopContextUrl))
-                {
-                    ctxReq.timeout = 2;
-                    yield return ctxReq.SendWebRequest();
-                    if (ctxReq.result == UnityWebRequest.Result.Success)
-                    {
-                        try
-                        {
-                            var ctx = JsonUtility.FromJson<DesktopContextInfo>(ctxReq.downloadHandler.text);
-                            if (ctx != null) appName = ctx.app;
-                        }
-                        catch { }
-                    }
-                }
-
-                string encodedApp = UnityWebRequest.EscapeURL(appName ?? "");
-                string url = $"http://127.0.0.1:5001/idle?character={charName}&app={encodedApp}";
+            catch { /* ignore malformed response */ }
         }
     }
 
