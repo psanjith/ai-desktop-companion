@@ -883,6 +883,7 @@ public class CompanionController : MonoBehaviour
             string fullRawText = "";
             int lastProcessed = 0;
             int detectedEmoteCount = 0; // Track in-stream emotes
+            bool doneHandled = false;
 
             // Start mouth animation + body gestures while tokens stream in
             if (faceAnim != null)
@@ -922,6 +923,7 @@ public class CompanionController : MonoBehaviour
                                 {
                                     // Final message with emotes + emotion — parse it
                                     StreamDone done = JsonUtility.FromJson<StreamDone>(jsonStr);
+                                    doneHandled = true;
 
                                     // Stop talking gestures — transition to emote animations
                                     if (emoteAnimator != null)
@@ -1021,6 +1023,56 @@ public class CompanionController : MonoBehaviour
                 yield return null; // Wait one frame
             }
 
+            // Fallback: if request succeeded but we never parsed the done event
+            // (can happen when SSE chunks split JSON lines), recover from full buffer.
+            if (req.result == UnityWebRequest.Result.Success && !doneHandled)
+            {
+                string allData = req.downloadHandler?.text ?? "";
+                string[] lines = allData.Split('\n');
+                for (int i = lines.Length - 1; i >= 0; i--)
+                {
+                    string trimmed = lines[i].Trim();
+                    if (!trimmed.StartsWith("data: ")) continue;
+                    string jsonStr = trimmed.Substring(6);
+                    bool isDoneEvent = jsonStr.Contains("\"done\":true") || jsonStr.Contains("\"done\": true");
+                    if (!isDoneEvent) continue;
+
+                    try
+                    {
+                        StreamDone done = JsonUtility.FromJson<StreamDone>(jsonStr);
+                        doneHandled = true;
+
+                        if (emoteAnimator != null)
+                            emoteAnimator.StopTalkingGestures();
+
+                        if (done.emotes != null && done.emotes.Length > 0)
+                            TriggerEmotes(done.emotes);
+
+                        if (!string.IsNullOrEmpty(done.emotion))
+                            TriggerEmotion(done.emotion);
+
+                        if (!string.IsNullOrEmpty(done.reply))
+                        {
+                            string safeReply = System.Text.RegularExpressions.Regex
+                                .Replace(done.reply, @"\*[^*]+\*", "");
+                            safeReply = System.Text.RegularExpressions.Regex
+                                .Replace(safeReply, @"\[e:[a-z]+\]", "");
+                            safeReply = System.Text.RegularExpressions.Regex
+                                .Replace(safeReply, @"\s{2,}", " ").Trim();
+                            if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
+                            ShowBubble(safeReply);
+                            TintBubble(done.emotion);
+                            StartCoroutine(SpeakReply(safeReply, charName));
+                        }
+
+                        if (faceAnim != null)
+                            faceAnim.StopTalking();
+                        break;
+                    }
+                    catch { /* ignore malformed fallback line and keep scanning */ }
+                }
+            }
+
             // Handle any errors
             if (req.result != UnityWebRequest.Result.Success)
             {
@@ -1034,6 +1086,16 @@ public class CompanionController : MonoBehaviour
                 if (emoteAnimator != null)
                     emoteAnimator.StopTalkingGestures();
             }
+
+            // Safety net: never leave UI/input locked after this coroutine exits.
+            if (_isStreaming)
+                _isStreaming = false;
+            SetInputLocked(false);
+            if (_dotCoroutine != null) { StopCoroutine(_dotCoroutine); _dotCoroutine = null; }
+            if (faceAnim != null)
+                faceAnim.StopTalking();
+            if (emoteAnimator != null && emoteAnimator.IsPlaying)
+                emoteAnimator.StopTalkingGestures();
         }
     }
 
