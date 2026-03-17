@@ -654,8 +654,27 @@ def _generate_elevenlabs_audio_bytes(text: str, tts: dict, emotion: str = "neutr
         raise ValueError(f"ElevenLabs API error {exc.code}: {detail or exc.reason}")
 
 
+def _generate_edge_tts_audio_bytes(text: str, voice: str = "en-US-JennyNeural"):
+    """Fallback cloud TTS using edge-tts (Microsoft neural voices, free, no API key)."""
+    try:
+        import edge_tts as _edge_tts
+    except Exception as exc:
+        raise ValueError(f"edge-tts unavailable: {exc}")
+    import asyncio
+
+    async def _run():
+        communicate = _edge_tts.Communicate(text, voice)
+        chunks = []
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                chunks.append(chunk["data"])
+        return b"".join(chunks)
+
+    return asyncio.run(_run())
+
+
 def _generate_gtts_audio_bytes(text: str):
-    """Fallback cloud TTS using gTTS (no API key needed)."""
+    """Last-resort cloud TTS using gTTS (robotic but dependency-free)."""
     try:
         from gtts import gTTS
     except Exception as exc:
@@ -752,13 +771,23 @@ def speak():
                         audio_bytes, voice_id = _generate_elevenlabs_audio_bytes(text, tts, emotion=emotion)
                         tts_meta = {"provider": "elevenlabs", "voice_id": voice_id, "mode": "client_playback"}
                     except Exception as eleven_exc:
-                        print(f"[TTS] ElevenLabs cloud failed, falling back to gTTS: {eleven_exc}")
-                        audio_bytes = _generate_gtts_audio_bytes(text)
-                        tts_meta = {
-                            "provider": "gtts",
-                            "mode": "client_playback",
-                            "fallback_reason": str(eleven_exc),
-                        }
+                        print(f"[TTS] ElevenLabs failed, trying edge-tts: {eleven_exc}")
+                        edge_voice = tts.get("edge_tts_voice", "en-US-JennyNeural")
+                        try:
+                            audio_bytes = _generate_edge_tts_audio_bytes(text, voice=edge_voice)
+                            tts_meta = {
+                                "provider": "edge-tts",
+                                "voice": edge_voice,
+                                "mode": "client_playback",
+                            }
+                        except Exception as edge_exc:
+                            print(f"[TTS] edge-tts failed, falling back to gTTS: {edge_exc}")
+                            audio_bytes = _generate_gtts_audio_bytes(text)
+                            tts_meta = {
+                                "provider": "gtts",
+                                "mode": "client_playback",
+                                "fallback_reason": str(edge_exc),
+                            }
 
                     token = _store_tts_audio(audio_bytes, mime="audio/mpeg")
                     base = request.host_url.rstrip("/").replace("http://", "https://")

@@ -16,7 +16,8 @@
       "stability": 0.46,
       "similarity_boost": 0.92,
       "style": 0.24,
-      "use_speaker_boost": true
+      "use_speaker_boost": true,
+      "edge_tts_voice": "en-US-JennyNeural"
     }
   },
   "male_default": {
@@ -36,7 +37,8 @@
       "stability": 0.3,
       "similarity_boost": 0.9,
       "style": 0.52,
-      "use_speaker_boost": true
+      "use_speaker_boost": true,
+      "edge_tts_voice": "en-GB-RyanNeural"
     }
   }
 }
