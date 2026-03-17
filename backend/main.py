@@ -761,7 +761,8 @@ def speak():
                         }
 
                     token = _store_tts_audio(audio_bytes, mime="audio/mpeg")
-                    audio_url = request.host_url.rstrip("/") + f"/speak/audio/{token}.mp3"
+                    base = request.host_url.rstrip("/").replace("http://", "https://")
+                    audio_url = base + f"/speak/audio/{token}.mp3"
                     return jsonify({
                         "ok": True,
                         "emotion": emotion,
