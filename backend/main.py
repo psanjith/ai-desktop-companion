@@ -6,6 +6,8 @@ import threading
 import tempfile
 import urllib.request
 import subprocess
+import time
+import uuid
 from flask import Flask, request, jsonify, Response, stream_with_context
 
 # Pre-load Whisper model once at startup — avoids ~2s reload on every /transcribe call
@@ -572,6 +574,9 @@ def get_facts():
 # Process handle so we can kill previous speech before starting new one
 _speak_proc = None
 _speak_audio_path = None
+_tts_audio_cache = {}
+_tts_audio_cache_lock = threading.Lock()
+_TTS_AUDIO_TTL_SECONDS = 120
 
 
 def _cleanup_audio_file():
@@ -584,11 +589,58 @@ def _cleanup_audio_file():
     _speak_audio_path = None
 
 
+def _purge_tts_audio_cache(now: float = None):
+    if now is None:
+        now = time.time()
+    expired = [k for k, v in _tts_audio_cache.items() if v["expires_at"] <= now]
+    for k in expired:
+        _tts_audio_cache.pop(k, None)
+
+
+def _store_tts_audio(audio_bytes: bytes, mime: str = "audio/mpeg") -> str:
+    token = uuid.uuid4().hex
+    with _tts_audio_cache_lock:
+        _purge_tts_audio_cache()
+        _tts_audio_cache[token] = {
+            "audio": audio_bytes,
+            "mime": mime,
+            "expires_at": time.time() + _TTS_AUDIO_TTL_SECONDS,
+        }
+    return token
+
+
 def _voice_profile_for(character: str):
     personality = _get_personality(character)
     tts = personality.get("tts", {})
     provider = (tts.get("provider") or _config.get("tts_provider") or "macos").lower()
     return personality, tts, provider
+
+
+def _generate_elevenlabs_audio_bytes(text: str, tts: dict, emotion: str = "neutral"):
+    api_key = tts.get("elevenlabs_api_key") or _config.get("elevenlabs_api_key") or os.environ.get("ELEVENLABS_API_KEY")
+    voice_id = tts.get("elevenlabs_voice_id")
+    if not api_key or not voice_id:
+        raise ValueError("ElevenLabs is selected, but API key or voice id is missing")
+
+    payload = {
+        "text": text,
+        "model_id": tts.get("elevenlabs_model", "eleven_multilingual_v2"),
+        "voice_settings": _voice_settings_for_emotion(tts, emotion),
+    }
+
+    req = urllib.request.Request(
+        url=f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "xi-api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=25) as resp:
+        audio_bytes = resp.read()
+    return audio_bytes, voice_id
 
 
 def _speak_macos(text: str, character: str, tts: dict, emotion: str = "neutral"):
@@ -615,30 +667,7 @@ def _speak_macos(text: str, character: str, tts: dict, emotion: str = "neutral")
 def _speak_elevenlabs(text: str, tts: dict, emotion: str = "neutral"):
     global _speak_proc, _speak_audio_path
     import subprocess
-
-    api_key = tts.get("elevenlabs_api_key") or _config.get("elevenlabs_api_key") or os.environ.get("ELEVENLABS_API_KEY")
-    voice_id = tts.get("elevenlabs_voice_id")
-    if not api_key or not voice_id:
-        raise ValueError("ElevenLabs is selected, but API key or voice id is missing")
-
-    payload = {
-        "text": text,
-        "model_id": tts.get("elevenlabs_model", "eleven_multilingual_v2"),
-        "voice_settings": _voice_settings_for_emotion(tts, emotion),
-    }
-
-    req = urllib.request.Request(
-        url=f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "xi-api-key": api_key,
-            "Content-Type": "application/json",
-            "Accept": "audio/mpeg",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(req, timeout=25) as resp:
-        audio_bytes = resp.read()
+    audio_bytes, voice_id = _generate_elevenlabs_audio_bytes(text, tts, emotion=emotion)
 
     _cleanup_audio_file()
     fd, path = tempfile.mkstemp(prefix="companion_tts_", suffix=".mp3")
@@ -648,6 +677,17 @@ def _speak_elevenlabs(text: str, tts: dict, emotion: str = "neutral"):
 
     _speak_proc = subprocess.Popen(["afplay", path])
     return {"provider": "elevenlabs", "voice_id": voice_id}
+
+
+@app.route("/speak/audio/<token>.mp3", methods=["GET"])
+def speak_audio(token: str):
+    """One-time downloadable TTS audio for client-side playback."""
+    with _tts_audio_cache_lock:
+        _purge_tts_audio_cache()
+        item = _tts_audio_cache.pop(token, None)
+    if not item:
+        return jsonify({"ok": False, "error": "Audio not found or expired"}), 404
+    return Response(item["audio"], mimetype=item["mime"])
 
 
 @app.route("/speak", methods=["POST"])
@@ -663,16 +703,30 @@ def speak():
         if not text:
             return jsonify({"ok": False, "error": "No text"}), 400
 
-        # macOS only
+        _, tts, provider = _voice_profile_for(character)
+
+        # Hosted/Linux path: generate audio and let Unity play it locally
         if sys.platform != "darwin":
-            return jsonify({"ok": False, "note": "TTS only supported on macOS"})
+            try:
+                if provider == "elevenlabs":
+                    audio_bytes, voice_id = _generate_elevenlabs_audio_bytes(text, tts, emotion=emotion)
+                    token = _store_tts_audio(audio_bytes, mime="audio/mpeg")
+                    audio_url = request.host_url.rstrip("/") + f"/speak/audio/{token}.mp3"
+                    return jsonify({
+                        "ok": True,
+                        "emotion": emotion,
+                        "tts": {"provider": "elevenlabs", "voice_id": voice_id, "mode": "client_playback"},
+                        "audio_url": audio_url,
+                        "audio_mime": "audio/mpeg",
+                    })
+                return jsonify({"ok": False, "note": "Cloud TTS needs provider=elevenlabs for client playback"})
+            except Exception as exc:
+                return jsonify({"ok": False, "error": str(exc), "note": "Cloud TTS generation failed"}), 500
 
         # Kill previous speech if still running
         if _speak_proc and _speak_proc.poll() is None:
             _speak_proc.terminate()
         _cleanup_audio_file()
-
-        _, tts, provider = _voice_profile_for(character)
 
         # Prefer profile provider, but gracefully fall back to high-quality local voice
         used = None
@@ -697,7 +751,7 @@ def speak_stop():
     global _speak_proc
     import sys
     if sys.platform != "darwin":
-        return jsonify({"ok": False, "note": "TTS only supported on macOS"})
+        return jsonify({"ok": True, "note": "No-op on hosted backend; client handles local audio stop"})
     if _speak_proc and _speak_proc.poll() is None:
         _speak_proc.terminate()
         _speak_proc = None

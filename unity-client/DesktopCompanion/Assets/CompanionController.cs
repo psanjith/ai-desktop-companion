@@ -64,6 +64,7 @@ public class CompanionController : MonoBehaviour
     private Button _sendBtn;           // ref to lock/unlock during streaming
     private Image  _statusDot;         // green/red connection indicator
     private Image  _bubbleBgImage;     // cached speech bubble background for mood tinting
+    private AudioSource _ttsAudioSource;
     private float  _lastInteractionTime;
     private const float ProactiveIdleDelay = 300f;  // 5 min silence → character speaks up
     private float _lastUserActivityTime;
@@ -118,6 +119,19 @@ public class CompanionController : MonoBehaviour
         _lastMousePos = Input.mousePosition;
         _nextProactiveAt = Time.time + Random.Range(190f, 340f);
         StartCoroutine(ProactiveMessageLoop());
+
+        EnsureTtsAudioSource();
+    }
+
+    private void EnsureTtsAudioSource()
+    {
+        if (_ttsAudioSource != null) return;
+        _ttsAudioSource = GetComponent<AudioSource>();
+        if (_ttsAudioSource == null)
+            _ttsAudioSource = gameObject.AddComponent<AudioSource>();
+        _ttsAudioSource.playOnAwake = false;
+        _ttsAudioSource.loop = false;
+        _ttsAudioSource.spatialBlend = 0f;
     }
 
     public string GetApiUrl(string path)
@@ -1197,6 +1211,36 @@ public class CompanionController : MonoBehaviour
             req.downloadHandler = new DownloadHandlerBuffer();
             req.SetRequestHeader("Content-Type", "application/json");
             yield return req.SendWebRequest();
+
+            if (req.result != UnityWebRequest.Result.Success)
+                yield break;
+
+            SpeakResponse resp = null;
+            try { resp = JsonUtility.FromJson<SpeakResponse>(req.downloadHandler.text); }
+            catch { }
+
+            // Hosted backend returns audio_url for client-side playback
+            if (resp != null && resp.ok && !string.IsNullOrEmpty(resp.audio_url))
+                yield return StartCoroutine(PlayRemoteTtsAudio(resp.audio_url));
+        }
+    }
+
+    private IEnumerator PlayRemoteTtsAudio(string audioUrl)
+    {
+        EnsureTtsAudioSource();
+        using (UnityWebRequest req = UnityWebRequestMultimedia.GetAudioClip(audioUrl, AudioType.MPEG))
+        {
+            req.timeout = 20;
+            yield return req.SendWebRequest();
+            if (req.result != UnityWebRequest.Result.Success)
+                yield break;
+
+            AudioClip clip = DownloadHandlerAudioClip.GetContent(req);
+            if (clip == null) yield break;
+
+            _ttsAudioSource.Stop();
+            _ttsAudioSource.clip = clip;
+            _ttsAudioSource.Play();
         }
     }
 
@@ -1300,6 +1344,8 @@ public class CompanionController : MonoBehaviour
     /// </summary>
     private void StopSpeech()
     {
+        if (_ttsAudioSource != null && _ttsAudioSource.isPlaying)
+            _ttsAudioSource.Stop();
         StartCoroutine(PostSpeakStop());
     }
 
@@ -1427,6 +1473,15 @@ public class CompanionController : MonoBehaviour
         public string text;
         public string character;
         public string emotion;
+    }
+
+    [System.Serializable]
+    private class SpeakResponse
+    {
+        public bool ok;
+        public string audio_url;
+        public string note;
+        public string error;
     }
 
     [System.Serializable]
