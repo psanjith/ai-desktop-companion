@@ -690,6 +690,21 @@ def speak_audio(token: str):
     return Response(item["audio"], mimetype=item["mime"])
 
 
+@app.route("/debug/tts-key", methods=["GET"])
+def debug_tts_key():
+    """Debug: confirm ElevenLabs key is present (never logs full key)."""
+    key = os.environ.get("ELEVENLABS_API_KEY", "")
+    if not key:
+        return jsonify({"found": False, "note": "ELEVENLABS_API_KEY env var not set"})
+    return jsonify({
+        "found": True,
+        "length": len(key),
+        "starts_with": key[:7],
+        "ends_with": key[-6:],
+        "has_whitespace": key != key.strip(),
+    })
+
+
 @app.route("/speak", methods=["POST"])
 def speak():
     """Speak text with per-character voice profiles (ElevenLabs or macOS fallback)."""
