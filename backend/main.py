@@ -654,16 +654,55 @@ def _generate_elevenlabs_audio_bytes(text: str, tts: dict, emotion: str = "neutr
         raise ValueError(f"ElevenLabs API error {exc.code}: {detail or exc.reason}")
 
 
-def _generate_edge_tts_audio_bytes(text: str, voice: str = "en-US-JennyNeural"):
+def _naturalize_tts_text(text: str) -> str:
+    """Light text cleanup to improve TTS rhythm and reduce robotic cadence."""
+    t = (text or "").strip()
+    if not t:
+        return t
+    # Ensure an ending punctuation mark so neural TTS closes phrases naturally.
+    if t[-1] not in ".!?":
+        t += "."
+    # Split long em-dash/colon segments into clearer pauses.
+    t = t.replace(" — ", ". ").replace(": ", ". ")
+    return t
+
+
+def _edge_tts_prosody_for_emotion(emotion: str, tts: dict):
+    emo = (emotion or "neutral").lower()
+    # Defaults tuned for more natural conversational cadence.
+    rate = tts.get("edge_tts_rate", "-8%")
+    pitch = tts.get("edge_tts_pitch", "+0Hz")
+    volume = tts.get("edge_tts_volume", "+0%")
+
+    if emo == "joy":
+        rate = "+0%"
+        pitch = "+2Hz"
+    elif emo == "fun":
+        rate = "+4%"
+        pitch = "+3Hz"
+    elif emo == "sorrow":
+        rate = "-15%"
+        pitch = "-2Hz"
+    elif emo == "angry":
+        rate = "+6%"
+        pitch = "+1Hz"
+
+    return rate, pitch, volume
+
+
+def _generate_edge_tts_audio_bytes(text: str, voice: str = "en-US-JennyNeural", emotion: str = "neutral", tts: dict | None = None):
     """Fallback cloud TTS using edge-tts (Microsoft neural voices, free, no API key)."""
     try:
         import edge_tts as _edge_tts
     except Exception as exc:
         raise ValueError(f"edge-tts unavailable: {exc}")
     import asyncio
+    tts = tts or {}
+    rate, pitch, volume = _edge_tts_prosody_for_emotion(emotion, tts)
+    spoken_text = _naturalize_tts_text(text)
 
     async def _run():
-        communicate = _edge_tts.Communicate(text, voice)
+        communicate = _edge_tts.Communicate(spoken_text, voice, rate=rate, pitch=pitch, volume=volume)
         chunks = []
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
@@ -774,11 +813,13 @@ def speak():
                         print(f"[TTS] ElevenLabs failed, trying edge-tts: {eleven_exc}")
                         edge_voice = tts.get("edge_tts_voice", "en-US-JennyNeural")
                         try:
-                            audio_bytes = _generate_edge_tts_audio_bytes(text, voice=edge_voice)
+                            audio_bytes = _generate_edge_tts_audio_bytes(text, voice=edge_voice, emotion=emotion, tts=tts)
                             tts_meta = {
                                 "provider": "edge-tts",
                                 "voice": edge_voice,
                                 "mode": "client_playback",
+                                "rate": _edge_tts_prosody_for_emotion(emotion, tts)[0],
+                                "pitch": _edge_tts_prosody_for_emotion(emotion, tts)[1],
                             }
                         except Exception as edge_exc:
                             print(f"[TTS] edge-tts failed, falling back to gTTS: {edge_exc}")

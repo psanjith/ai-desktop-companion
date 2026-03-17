@@ -17,7 +17,10 @@
       "similarity_boost": 0.92,
       "style": 0.24,
       "use_speaker_boost": true,
-      "edge_tts_voice": "en-US-JennyNeural"
+      "edge_tts_voice": "en-US-AriaNeural",
+      "edge_tts_rate": "-6%",
+      "edge_tts_pitch": "+1Hz",
+      "edge_tts_volume": "+0%"
     }
   },
   "male_default": {
@@ -38,7 +41,10 @@
       "similarity_boost": 0.9,
       "style": 0.52,
       "use_speaker_boost": true,
-      "edge_tts_voice": "en-GB-RyanNeural"
+      "edge_tts_voice": "en-US-GuyNeural",
+      "edge_tts_rate": "-10%",
+      "edge_tts_pitch": "-1Hz",
+      "edge_tts_volume": "+0%"
     }
   }
 }
