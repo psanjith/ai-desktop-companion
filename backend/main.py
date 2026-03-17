@@ -631,20 +631,26 @@ def _generate_elevenlabs_audio_bytes(text: str, tts: dict, emotion: str = "neutr
         "voice_settings": _voice_settings_for_emotion(tts, emotion),
     }
 
-    import requests as _requests
-    resp = _requests.post(
-        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+    req = urllib.request.Request(
+        url=f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+        data=json.dumps(payload).encode("utf-8"),
         headers={
             "xi-api-key": api_key,
             "Content-Type": "application/json",
             "Accept": "audio/mpeg",
         },
-        json=payload,
-        timeout=25,
+        method="POST",
     )
-    if not resp.ok:
-        raise ValueError(f"ElevenLabs API error {resp.status_code}: {resp.text[:200]}")
-    return resp.content, voice_id
+    try:
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            audio_bytes = resp.read()
+        return audio_bytes, voice_id
+    except urllib.error.HTTPError as exc:
+        try:
+            detail = exc.read().decode("utf-8", errors="ignore")[:300]
+        except Exception:
+            detail = ""
+        raise ValueError(f"ElevenLabs API error {exc.code}: {detail or exc.reason}")
 
 
 def _speak_macos(text: str, character: str, tts: dict, emotion: str = "neutral"):

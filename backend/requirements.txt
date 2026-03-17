@@ -1,7 +1,6 @@
 flask
 ollama
 faster-whisper
-requests
 
 # Cloud providers (install whichever matches your config.json "provider")
 groq          # provider = "groq"   → pip install groq
