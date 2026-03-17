@@ -31,3 +31,4 @@ build/
 *.csproj
 *.sln
 *.user
+backend/config.json
