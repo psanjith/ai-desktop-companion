@@ -5,6 +5,7 @@ import re
 import threading
 import tempfile
 import urllib.request
+import urllib.error
 import subprocess
 import time
 import uuid
@@ -653,6 +654,19 @@ def _generate_elevenlabs_audio_bytes(text: str, tts: dict, emotion: str = "neutr
         raise ValueError(f"ElevenLabs API error {exc.code}: {detail or exc.reason}")
 
 
+def _generate_gtts_audio_bytes(text: str):
+    """Fallback cloud TTS using gTTS (no API key needed)."""
+    try:
+        from gtts import gTTS
+    except Exception as exc:
+        raise ValueError(f"gTTS unavailable: {exc}")
+
+    from io import BytesIO
+    buf = BytesIO()
+    gTTS(text=text, lang="en", slow=False).write_to_fp(buf)
+    return buf.getvalue()
+
+
 def _speak_macos(text: str, character: str, tts: dict, emotion: str = "neutral"):
     global _speak_proc
     import subprocess
@@ -734,13 +748,24 @@ def speak():
         if sys.platform != "darwin":
             try:
                 if provider == "elevenlabs":
-                    audio_bytes, voice_id = _generate_elevenlabs_audio_bytes(text, tts, emotion=emotion)
+                    try:
+                        audio_bytes, voice_id = _generate_elevenlabs_audio_bytes(text, tts, emotion=emotion)
+                        tts_meta = {"provider": "elevenlabs", "voice_id": voice_id, "mode": "client_playback"}
+                    except Exception as eleven_exc:
+                        print(f"[TTS] ElevenLabs cloud failed, falling back to gTTS: {eleven_exc}")
+                        audio_bytes = _generate_gtts_audio_bytes(text)
+                        tts_meta = {
+                            "provider": "gtts",
+                            "mode": "client_playback",
+                            "fallback_reason": str(eleven_exc),
+                        }
+
                     token = _store_tts_audio(audio_bytes, mime="audio/mpeg")
                     audio_url = request.host_url.rstrip("/") + f"/speak/audio/{token}.mp3"
                     return jsonify({
                         "ok": True,
                         "emotion": emotion,
-                        "tts": {"provider": "elevenlabs", "voice_id": voice_id, "mode": "client_playback"},
+                        "tts": tts_meta,
                         "audio_url": audio_url,
                         "audio_mime": "audio/mpeg",
                     })
