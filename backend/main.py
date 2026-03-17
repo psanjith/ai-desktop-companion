@@ -617,7 +617,10 @@ def _voice_profile_for(character: str):
 
 
 def _generate_elevenlabs_audio_bytes(text: str, tts: dict, emotion: str = "neutral"):
-    api_key = tts.get("elevenlabs_api_key") or _config.get("elevenlabs_api_key") or os.environ.get("ELEVENLABS_API_KEY")
+    # Env var takes priority so Render can override any baked-in config
+    api_key = (os.environ.get("ELEVENLABS_API_KEY")
+               or tts.get("elevenlabs_api_key")
+               or _config.get("elevenlabs_api_key"))
     voice_id = tts.get("elevenlabs_voice_id")
     if not api_key or not voice_id:
         raise ValueError("ElevenLabs is selected, but API key or voice id is missing")
@@ -628,19 +631,20 @@ def _generate_elevenlabs_audio_bytes(text: str, tts: dict, emotion: str = "neutr
         "voice_settings": _voice_settings_for_emotion(tts, emotion),
     }
 
-    req = urllib.request.Request(
-        url=f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
-        data=json.dumps(payload).encode("utf-8"),
+    import requests as _requests
+    resp = _requests.post(
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
         headers={
             "xi-api-key": api_key,
             "Content-Type": "application/json",
             "Accept": "audio/mpeg",
         },
-        method="POST",
+        json=payload,
+        timeout=25,
     )
-    with urllib.request.urlopen(req, timeout=25) as resp:
-        audio_bytes = resp.read()
-    return audio_bytes, voice_id
+    if not resp.ok:
+        raise ValueError(f"ElevenLabs API error {resp.status_code}: {resp.text[:200]}")
+    return resp.content, voice_id
 
 
 def _speak_macos(text: str, character: str, tts: dict, emotion: str = "neutral"):
