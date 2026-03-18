@@ -40,6 +40,7 @@ public class CompanionController : MonoBehaviour
     private const string VoiceOutputPrefKey = "companion_voice_output_enabled";
     private GameObject _voiceToggleButton;
     private TextMeshProUGUI _voiceToggleIcon;
+    private GameObject _micToggleButton;
 
     // Speech bubble auto-dismiss
     private Coroutine _bubbleDismissTimer;
@@ -108,6 +109,7 @@ public class CompanionController : MonoBehaviour
         BuildToggleButton(canvas);
         BuildBubbleToggle(canvas);
         BuildVoiceToggle(canvas);
+        BuildMicToggle(canvas);
         BuildBubbleHiddenBadge(canvas);
         BuildStatusDot(canvas);
 
@@ -492,41 +494,8 @@ public class CompanionController : MonoBehaviour
             }
         }
 
-        // ── Mic button (right of Send) ────────────────────────────────────
+        // ── Clear memory button ───────────────────────────────────────
         {
-            GameObject micBtn = new GameObject("MicButton");
-            micBtn.transform.SetParent(chatPanel.transform, false);
-            micButtonImage = micBtn.AddComponent<Image>();
-            micButtonImage.color = BgButton;
-            MakeRounded(micButtonImage);
-            var micLE = micBtn.AddComponent<LayoutElement>();
-            micLE.minWidth = 52f; micLE.preferredWidth = 52f;
-            micLE.minHeight = 38f; micLE.preferredHeight = 38f;
-            micLE.flexibleWidth = 0f;
-            var micBtnComp = micBtn.AddComponent<Button>();
-            var micCols = micBtnComp.colors;
-            micCols.normalColor      = BgButton;
-            micCols.highlightedColor = new Color(0.27f, 0.28f, 0.31f, 0.82f);
-            micCols.pressedColor     = new Color(0.23f, 0.24f, 0.26f, 0.78f);
-            micCols.fadeDuration     = 0.12f;
-            micBtnComp.colors = micCols;
-            micBtnComp.onClick.AddListener(() => {
-                var vim = GetComponent<VoiceInputManager>();
-                if (vim != null) vim.OnMicButtonPressed();
-            });
-            var micIconObj = new GameObject("Icon");
-            micIconObj.transform.SetParent(micBtn.transform, false);
-            var micIconRect = micIconObj.AddComponent<RectTransform>();
-            micIconRect.anchorMin = Vector2.zero; micIconRect.anchorMax = Vector2.one;
-            micIconRect.sizeDelta = Vector2.zero; micIconRect.offsetMin = Vector2.zero; micIconRect.offsetMax = Vector2.zero;
-            var micIcon = micIconObj.AddComponent<TextMeshProUGUI>();
-            micIcon.text = "Mic"; micIcon.fontSize = 11f;
-            micIcon.color = TextMuted;
-            micIcon.alignment = TextAlignmentOptions.Center;
-            micIcon.enableWordWrapping = false;
-            micLabel = micIcon; // saved for dynamic label updates
-
-            // ── Clear memory button ───────────────────────────────────────
             GameObject clrBtn = new GameObject("ClearButton");
             clrBtn.transform.SetParent(chatPanel.transform, false);
             var clrBg = clrBtn.AddComponent<Image>();
@@ -751,6 +720,52 @@ public class CompanionController : MonoBehaviour
         _voiceToggleIcon.enableWordWrapping = false;
     }
 
+    // ── Mic toggle button (right-edge rail, top-most) ──────────────────────
+    private void BuildMicToggle(Canvas canvas)
+    {
+        if (canvas == null) return;
+
+        _micToggleButton = new GameObject("MicToggleButton");
+        _micToggleButton.transform.SetParent(canvas.transform, false);
+
+        var rect = _micToggleButton.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 0f);
+        rect.anchorMax = new Vector2(1f, 0f);
+        rect.pivot     = new Vector2(1f, 0f);
+        rect.anchoredPosition = new Vector2(-12f, 132f);
+        rect.sizeDelta = new Vector2(72f, 34f);
+
+        micButtonImage = _micToggleButton.AddComponent<Image>();
+        micButtonImage.color = BgButton;
+        MakeRounded(micButtonImage);
+
+        var btn = _micToggleButton.AddComponent<Button>();
+        var cols = btn.colors;
+        cols.normalColor      = BgButton;
+        cols.highlightedColor = new Color(0.27f, 0.28f, 0.31f, 0.82f);
+        cols.pressedColor     = new Color(0.23f, 0.24f, 0.26f, 0.78f);
+        cols.fadeDuration     = 0.08f;
+        btn.colors = cols;
+        btn.onClick.AddListener(() => {
+            var vim = GetComponent<VoiceInputManager>();
+            if (vim != null) vim.OnMicButtonPressed();
+        });
+
+        var iconObj = new GameObject("Icon");
+        iconObj.transform.SetParent(_micToggleButton.transform, false);
+        var iconRect = iconObj.AddComponent<RectTransform>();
+        iconRect.anchorMin = Vector2.zero; iconRect.anchorMax = Vector2.one;
+        iconRect.sizeDelta = Vector2.zero; iconRect.offsetMin = Vector2.zero; iconRect.offsetMax = Vector2.zero;
+
+        var icon = iconObj.AddComponent<TextMeshProUGUI>();
+        icon.text = "Mic";
+        icon.fontSize = 10f;
+        icon.color = TextMuted;
+        icon.alignment = TextAlignmentOptions.Center;
+        icon.enableWordWrapping = false;
+        micLabel = icon;
+    }
+
     private void BuildBubbleHiddenBadge(Canvas canvas)
     {
         if (canvas == null) return;
@@ -762,7 +777,7 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin = new Vector2(1f, 0f);
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
-        rect.anchoredPosition = new Vector2(-12f, 132f); // above the right-side control rail
+        rect.anchoredPosition = new Vector2(-12f, 172f); // above the right-side control rail
         rect.sizeDelta = new Vector2(100f, 22f);
 
         var bg = _bubbleHiddenBadge.AddComponent<Image>();
@@ -953,6 +968,10 @@ public class CompanionController : MonoBehaviour
         // Voice output toggle follows the same HUD visibility rule as bubble toggle
         if (_voiceToggleButton != null)
             _voiceToggleButton.SetActive(!visible);
+
+        // Mic toggle also lives on the right-side control rail
+        if (_micToggleButton != null)
+            _micToggleButton.SetActive(!visible);
 
         UpdateBubbleHiddenBadgeVisibility();
 
