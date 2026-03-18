@@ -35,6 +35,12 @@ public class CompanionController : MonoBehaviour
     private TextMeshProUGUI _bubbleToggleIcon;
     private GameObject _bubbleHiddenBadge;
 
+    // Voice output toggle — when false no TTS requests/playback are performed
+    private bool _voiceOutputEnabled = true;
+    private const string VoiceOutputPrefKey = "companion_voice_output_enabled";
+    private GameObject _voiceToggleButton;
+    private TextMeshProUGUI _voiceToggleIcon;
+
     // Speech bubble auto-dismiss
     private Coroutine _bubbleDismissTimer;
     private const float BubbleHoldTime  = 8f;  // seconds before fade starts
@@ -100,8 +106,12 @@ public class CompanionController : MonoBehaviour
         BuildChatPanel(canvas);
         BuildToggleButton(canvas);
         BuildBubbleToggle(canvas);
+        BuildVoiceToggle(canvas);
         BuildBubbleHiddenBadge(canvas);
         BuildStatusDot(canvas);
+
+        _voiceOutputEnabled = PlayerPrefs.GetInt(VoiceOutputPrefKey, 1) == 1;
+        UpdateVoiceToggleVisuals();
 
         UpdateCharacterNameUI();
         SetTextChatVisible(false);
@@ -632,6 +642,48 @@ public class CompanionController : MonoBehaviour
         UpdateBubbleHiddenBadgeVisibility();
     }
 
+    // ── Voice output toggle button ───────────────────────────────────────────
+    private void BuildVoiceToggle(Canvas canvas)
+    {
+        if (canvas == null) return;
+
+        _voiceToggleButton = new GameObject("VoiceToggleButton");
+        _voiceToggleButton.transform.SetParent(canvas.transform, false);
+
+        var rect = _voiceToggleButton.AddComponent<RectTransform>();
+        rect.anchorMin = new Vector2(1f, 0f);
+        rect.anchorMax = new Vector2(1f, 0f);
+        rect.pivot     = new Vector2(1f, 0f);
+        // Sits left of bubble toggle button
+        rect.anchoredPosition = new Vector2(-112f, 12f);
+        rect.sizeDelta = new Vector2(36f, 36f);
+
+        var bg = _voiceToggleButton.AddComponent<Image>();
+        bg.color = BgButton;
+        MakeRounded(bg);
+
+        var btn = _voiceToggleButton.AddComponent<Button>();
+        var cols = btn.colors;
+        cols.normalColor      = BgButton;
+        cols.highlightedColor = new Color(0.20f, 0.22f, 0.32f, 1f);
+        cols.pressedColor     = new Color(0.27f, 0.28f, 0.38f, 1f);
+        cols.fadeDuration     = 0.08f;
+        btn.colors = cols;
+        btn.onClick.AddListener(OnToggleVoiceOutput);
+
+        var iconObj = new GameObject("Icon");
+        iconObj.transform.SetParent(_voiceToggleButton.transform, false);
+        var iconRect = iconObj.AddComponent<RectTransform>();
+        iconRect.anchorMin = Vector2.zero; iconRect.anchorMax = Vector2.one;
+        iconRect.sizeDelta = Vector2.zero; iconRect.offsetMin = Vector2.zero; iconRect.offsetMax = Vector2.zero;
+
+        _voiceToggleIcon = iconObj.AddComponent<TextMeshProUGUI>();
+        _voiceToggleIcon.text      = "🔊";
+        _voiceToggleIcon.fontSize  = 14f;
+        _voiceToggleIcon.alignment = TextAlignmentOptions.Center;
+        _voiceToggleIcon.enableWordWrapping = false;
+    }
+
     private void BuildBubbleHiddenBadge(Canvas canvas)
     {
         if (canvas == null) return;
@@ -643,7 +695,7 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin = new Vector2(1f, 0f);
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
-        rect.anchoredPosition = new Vector2(-120f, 16f); // left of bottom-right control cluster
+        rect.anchoredPosition = new Vector2(-168f, 16f); // left of bottom-right control cluster
         rect.sizeDelta = new Vector2(100f, 22f);
 
         var bg = _bubbleHiddenBadge.AddComponent<Image>();
@@ -701,6 +753,37 @@ public class CompanionController : MonoBehaviour
                 : TextPrimary;
 
         UpdateBubbleHiddenBadgeVisibility();
+    }
+
+    private void OnToggleVoiceOutput()
+    {
+        _voiceOutputEnabled = !_voiceOutputEnabled;
+        PlayerPrefs.SetInt(VoiceOutputPrefKey, _voiceOutputEnabled ? 1 : 0);
+        PlayerPrefs.Save();
+
+        if (!_voiceOutputEnabled)
+            StopSpeech();
+
+        UpdateVoiceToggleVisuals();
+    }
+
+    private void UpdateVoiceToggleVisuals()
+    {
+        if (_voiceToggleButton != null)
+        {
+            var bg = _voiceToggleButton.GetComponent<Image>();
+            if (bg != null)
+                bg.color = _voiceOutputEnabled
+                    ? BgButton
+                    : new Color(0.22f, 0.10f, 0.10f, 0.90f);
+        }
+        if (_voiceToggleIcon != null)
+        {
+            _voiceToggleIcon.text = _voiceOutputEnabled ? "🔊" : "🔇";
+            _voiceToggleIcon.color = _voiceOutputEnabled
+                ? TextPrimary
+                : new Color(0.55f, 0.25f, 0.25f, 1f);
+        }
     }
 
     // ── Status dot ────────────────────────────────────────────────────────────
@@ -796,6 +879,10 @@ public class CompanionController : MonoBehaviour
         // Bubble toggle also hides when the panel is open — it sits next to the Chat button
         if (_bubbleToggleButton != null)
             _bubbleToggleButton.SetActive(!visible);
+
+        // Voice output toggle follows the same HUD visibility rule as bubble toggle
+        if (_voiceToggleButton != null)
+            _voiceToggleButton.SetActive(!visible);
 
         UpdateBubbleHiddenBadgeVisibility();
 
@@ -1203,6 +1290,9 @@ public class CompanionController : MonoBehaviour
     /// </summary>
     IEnumerator SpeakReply(string text, string character, string emotion = "neutral")
     {
+        if (!_voiceOutputEnabled)
+            yield break;
+
         string body = JsonUtility.ToJson(new SpeakRequest { text = text, character = character, emotion = emotion });
         byte[] raw  = System.Text.Encoding.UTF8.GetBytes(body);
         using (UnityWebRequest req = new UnityWebRequest(speakUrl, "POST"))
