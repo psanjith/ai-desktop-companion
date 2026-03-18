@@ -4,17 +4,15 @@ on:
   workflow_dispatch:
 
 jobs:
-  request-activation-file:
+  activation-guidance:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Request Unity activation file (.alf)
-        uses: game-ci/unity-request-activation-file@v2
-
-      - name: Upload activation file artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: unity-activation-request
-          path: '*.alf'
+      - name: Unity activation guidance
+        run: |
+          echo "The old .alf GitHub action is deprecated."
+          echo "Use the new GameCI flow: https://game.ci/docs/github/activation"
+          echo ""
+          echo "Personal license:"
+          echo "1) Activate Unity locally in Unity Hub (Preferences -> Licenses -> Add)."
+          echo "2) Read /Library/Application Support/Unity/Unity_lic.ulf on macOS."
+          echo "3) Add secrets UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD in GitHub Actions."
