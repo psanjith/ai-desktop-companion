@@ -73,6 +73,10 @@ public class CompanionController : MonoBehaviour
     private Image  _statusDot;         // green/red connection indicator
     private Image  _bubbleBgImage;     // cached speech bubble background for mood tinting
     private AudioSource _ttsAudioSource;
+    private bool _startupReady = false;
+    private GameObject _loadingOverlay;
+    private TextMeshProUGUI _loadingStatusText;
+    private Coroutine _loadingDotsCoroutine;
     private float  _lastInteractionTime;
     private const float ProactiveIdleDelay = 300f;  // 5 min silence → character speaks up
     private float _lastUserActivityTime;
@@ -111,6 +115,7 @@ public class CompanionController : MonoBehaviour
         BuildVoiceToggle(canvas);
         BuildMicToggle(canvas);
         BuildBubbleHiddenBadge(canvas);
+        BuildLoadingOverlay(canvas);
         BuildStatusDot(canvas);
 
         _voiceOutputEnabled = PlayerPrefs.GetInt(VoiceOutputPrefKey, 1) == 1;
@@ -123,8 +128,8 @@ public class CompanionController : MonoBehaviour
         if (GetComponent<VoiceInputManager>() == null)
             gameObject.AddComponent<VoiceInputManager>();
 
-        // Start periodic backend health-check
-        StartCoroutine(HealthCheckLoop());
+        // Warm backend during startup splash to hide Render cold start latency
+        StartCoroutine(WarmupBackendOnLaunch());
 
         // Proactive idle messages — character speaks up after 5 min of silence
         _lastInteractionTime = Time.time;
@@ -359,6 +364,146 @@ public class CompanionController : MonoBehaviour
         }
 
         speechBubble.SetActive(false);
+    }
+
+    private void BuildLoadingOverlay(Canvas canvas)
+    {
+        if (canvas == null) return;
+
+        _loadingOverlay = new GameObject("StartupLoadingOverlay");
+        _loadingOverlay.transform.SetParent(canvas.transform, false);
+
+        var root = _loadingOverlay.AddComponent<RectTransform>();
+        root.anchorMin = Vector2.zero;
+        root.anchorMax = Vector2.one;
+        root.offsetMin = Vector2.zero;
+        root.offsetMax = Vector2.zero;
+
+        var scrim = _loadingOverlay.AddComponent<Image>();
+        scrim.color = new Color(0.04f, 0.05f, 0.07f, 0.86f);
+
+        var card = new GameObject("Card");
+        card.transform.SetParent(_loadingOverlay.transform, false);
+        var cardRect = card.AddComponent<RectTransform>();
+        cardRect.anchorMin = new Vector2(0.5f, 0.5f);
+        cardRect.anchorMax = new Vector2(0.5f, 0.5f);
+        cardRect.pivot = new Vector2(0.5f, 0.5f);
+        cardRect.sizeDelta = new Vector2(460f, 170f);
+
+        var cardBg = card.AddComponent<Image>();
+        cardBg.color = new Color(0.11f, 0.12f, 0.16f, 0.92f);
+        MakeRounded(cardBg);
+
+        var cardShadow = card.AddComponent<Shadow>();
+        cardShadow.effectColor = new Color(0f, 0f, 0f, 0.45f);
+        cardShadow.effectDistance = new Vector2(0f, -5f);
+
+        var titleObj = new GameObject("Title");
+        titleObj.transform.SetParent(card.transform, false);
+        var titleRect = titleObj.AddComponent<RectTransform>();
+        titleRect.anchorMin = new Vector2(0.5f, 1f);
+        titleRect.anchorMax = new Vector2(0.5f, 1f);
+        titleRect.pivot = new Vector2(0.5f, 1f);
+        titleRect.anchoredPosition = new Vector2(0f, -24f);
+        titleRect.sizeDelta = new Vector2(420f, 40f);
+        var title = titleObj.AddComponent<TextMeshProUGUI>();
+        title.text = "Desktop Companion";
+        title.fontSize = 24f;
+        title.fontStyle = FontStyles.Bold;
+        title.alignment = TextAlignmentOptions.Center;
+        title.color = new Color(0.92f, 0.94f, 0.98f, 1f);
+
+        var subtitleObj = new GameObject("Subtitle");
+        subtitleObj.transform.SetParent(card.transform, false);
+        var subtitleRect = subtitleObj.AddComponent<RectTransform>();
+        subtitleRect.anchorMin = new Vector2(0.5f, 1f);
+        subtitleRect.anchorMax = new Vector2(0.5f, 1f);
+        subtitleRect.pivot = new Vector2(0.5f, 1f);
+        subtitleRect.anchoredPosition = new Vector2(0f, -60f);
+        subtitleRect.sizeDelta = new Vector2(420f, 28f);
+        var subtitle = subtitleObj.AddComponent<TextMeshProUGUI>();
+        subtitle.text = "Preparing your companion...";
+        subtitle.fontSize = 14f;
+        subtitle.alignment = TextAlignmentOptions.Center;
+        subtitle.color = new Color(0.65f, 0.71f, 0.82f, 0.95f);
+
+        var statusObj = new GameObject("Status");
+        statusObj.transform.SetParent(card.transform, false);
+        var statusRect = statusObj.AddComponent<RectTransform>();
+        statusRect.anchorMin = new Vector2(0.5f, 0f);
+        statusRect.anchorMax = new Vector2(0.5f, 0f);
+        statusRect.pivot = new Vector2(0.5f, 0f);
+        statusRect.anchoredPosition = new Vector2(0f, 18f);
+        statusRect.sizeDelta = new Vector2(420f, 28f);
+        _loadingStatusText = statusObj.AddComponent<TextMeshProUGUI>();
+        _loadingStatusText.text = "Waking backend";
+        _loadingStatusText.fontSize = 13f;
+        _loadingStatusText.alignment = TextAlignmentOptions.Center;
+        _loadingStatusText.color = new Color(0.80f, 0.84f, 0.92f, 0.95f);
+
+        _loadingOverlay.SetActive(false);
+    }
+
+    private IEnumerator AnimateLoadingDots(string baseText)
+    {
+        int i = 0;
+        string[] dots = { ".", "..", "..." };
+        while (true)
+        {
+            if (_loadingStatusText != null)
+                _loadingStatusText.text = baseText + dots[i % dots.Length];
+            i++;
+            yield return new WaitForSecondsRealtime(0.35f);
+        }
+    }
+
+    private IEnumerator WarmupBackendOnLaunch()
+    {
+        _startupReady = false;
+
+        if (_loadingOverlay != null)
+            _loadingOverlay.SetActive(true);
+
+        SetInputLocked(true);
+        SetTextChatVisible(false);
+
+        if (_loadingDotsCoroutine != null) StopCoroutine(_loadingDotsCoroutine);
+        _loadingDotsCoroutine = StartCoroutine(AnimateLoadingDots("Waking cloud backend"));
+
+        bool warmOk = false;
+        string warmUrl = GetApiUrl("/character?id=female_default");
+        using (UnityWebRequest req = UnityWebRequest.Get(warmUrl))
+        {
+            req.timeout = 20;
+            yield return req.SendWebRequest();
+            warmOk = req.result == UnityWebRequest.Result.Success;
+        }
+
+        float minSplash = 1.4f;
+        float elapsed = 0f;
+        while (elapsed < minSplash)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (_loadingDotsCoroutine != null)
+        {
+            StopCoroutine(_loadingDotsCoroutine);
+            _loadingDotsCoroutine = null;
+        }
+
+        if (_loadingStatusText != null)
+            _loadingStatusText.text = warmOk ? "Ready" : "Continuing in startup mode";
+
+        yield return new WaitForSecondsRealtime(0.2f);
+
+        if (_loadingOverlay != null)
+            _loadingOverlay.SetActive(false);
+
+        _startupReady = true;
+        SetInputLocked(false);
+        StartCoroutine(HealthCheckLoop());
     }
 
     // ── Bottom chat panel ────────────────────────────────────────────────────
@@ -917,6 +1062,9 @@ public class CompanionController : MonoBehaviour
     /// </summary>
     void Update()
     {
+            if (!_startupReady)
+                return;
+
         // Track user activity continuously (for quiet-aware proactive timing)
         if ((Input.mousePosition - _lastMousePos).sqrMagnitude > 2f)
         {
@@ -944,6 +1092,7 @@ public class CompanionController : MonoBehaviour
     /// </summary>
     public void OnToggleChat()
     {
+        if (!_startupReady) return;
         SetTextChatVisible(!textChatVisible);
     }
 
@@ -1011,6 +1160,7 @@ public class CompanionController : MonoBehaviour
     /// </summary>
     public void OnSwitchCharacter()
     {
+        if (!_startupReady) return;
         if (CharacterManager.Instance != null)
         {
             CharacterManager.Instance.SwitchCharacter();
@@ -1059,6 +1209,7 @@ public class CompanionController : MonoBehaviour
 
     public void OnSendMessage()
     {
+        if (!_startupReady) return;
         if (userInputField == null) return;
         if (_isStreaming) return; // ignore while a response is in flight
         string message = userInputField.text.Trim();
