@@ -631,8 +631,9 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin = new Vector2(1f, 0f);
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
+        // Right-edge control rail (bottom button)
         rect.anchoredPosition = new Vector2(-12f, 12f);
-        rect.sizeDelta = new Vector2(58f, 36f);
+        rect.sizeDelta = new Vector2(72f, 34f);
 
         var bg = toggleButton.AddComponent<Image>();
         bg.color = AccentColor;
@@ -676,9 +677,9 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin = new Vector2(1f, 0f);
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
-        // Sits directly left of the Chat toggle button (which is at -12, 12, w=52)
-        rect.anchoredPosition = new Vector2(-78f, 12f);
-        rect.sizeDelta = new Vector2(64f, 36f);
+        // Right-edge control rail (middle button)
+        rect.anchoredPosition = new Vector2(-12f, 52f);
+        rect.sizeDelta = new Vector2(72f, 34f);
 
         var bg = _bubbleToggleButton.AddComponent<Image>();
         bg.color = BgButton;
@@ -720,9 +721,9 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin = new Vector2(1f, 0f);
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
-        // Sits left of bubble toggle button
-        rect.anchoredPosition = new Vector2(-146f, 12f);
-        rect.sizeDelta = new Vector2(64f, 36f);
+        // Right-edge control rail (top button)
+        rect.anchoredPosition = new Vector2(-12f, 92f);
+        rect.sizeDelta = new Vector2(72f, 34f);
 
         var bg = _voiceToggleButton.AddComponent<Image>();
         bg.color = BgButton;
@@ -761,7 +762,7 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin = new Vector2(1f, 0f);
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
-        rect.anchoredPosition = new Vector2(-236f, 16f); // left of bottom-right control cluster
+        rect.anchoredPosition = new Vector2(-12f, 132f); // above the right-side control rail
         rect.sizeDelta = new Vector2(100f, 22f);
 
         var bg = _bubbleHiddenBadge.AddComponent<Image>();
