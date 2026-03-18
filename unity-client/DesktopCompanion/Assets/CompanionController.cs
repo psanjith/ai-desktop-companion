@@ -646,8 +646,8 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin = new Vector2(1f, 0f);
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
-        // Right-edge control rail (middle button)
-        rect.anchoredPosition = new Vector2(-12f, 52f);
+        // Right-edge control rail (third button)
+        rect.anchoredPosition = new Vector2(-12f, 92f);
         rect.sizeDelta = new Vector2(72f, 34f);
 
         var bg = _bubbleToggleButton.AddComponent<Image>();
@@ -691,7 +691,7 @@ public class CompanionController : MonoBehaviour
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
         // Right-edge control rail (top button)
-        rect.anchoredPosition = new Vector2(-12f, 92f);
+        rect.anchoredPosition = new Vector2(-12f, 132f);
         rect.sizeDelta = new Vector2(72f, 34f);
 
         var bg = _voiceToggleButton.AddComponent<Image>();
@@ -732,7 +732,7 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin = new Vector2(1f, 0f);
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
-        rect.anchoredPosition = new Vector2(-12f, 132f);
+        rect.anchoredPosition = new Vector2(-12f, 52f);
         rect.sizeDelta = new Vector2(72f, 34f);
 
         micButtonImage = _micToggleButton.AddComponent<Image>();
@@ -777,7 +777,7 @@ public class CompanionController : MonoBehaviour
         rect.anchorMin = new Vector2(1f, 0f);
         rect.anchorMax = new Vector2(1f, 0f);
         rect.pivot     = new Vector2(1f, 0f);
-        rect.anchoredPosition = new Vector2(-12f, 172f); // above the right-side control rail
+        rect.anchoredPosition = new Vector2(-12f, 212f); // above the right-side control rail
         rect.sizeDelta = new Vector2(100f, 22f);
 
         var bg = _bubbleHiddenBadge.AddComponent<Image>();
