@@ -41,6 +41,23 @@ _OLLAMA_HOST = os.environ.get("OLLAMA_HOST", _config.get("ollama_host", "http://
 _API_KEY = os.environ.get("API_KEY", _config.get("api_key", ""))
 print(f"[Config] Provider: {_PROVIDER}  Model: {_MODEL}")
 
+
+def _int_cfg(name: str, default: int) -> int:
+    raw = os.environ.get(name, str(default))
+    try:
+        return int(raw)
+    except Exception:
+        print(f"[Config] Invalid {name}={raw!r}; using {default}")
+        return default
+
+
+# Render latency knobs (override via env vars if needed)
+_HISTORY_LIMIT = max(2, _int_cfg("HISTORY_LIMIT", 4))
+_FACTS_LIMIT = max(0, _int_cfg("FACTS_LIMIT", 4))
+_MAX_TOKENS = max(40, _int_cfg("MAX_TOKENS", 80))
+_OLLAMA_NUM_PREDICT = max(40, _int_cfg("OLLAMA_NUM_PREDICT", 64))
+print(f"[Perf] history={_HISTORY_LIMIT} facts={_FACTS_LIMIT} max_tokens={_MAX_TOKENS}")
+
 # ── LLM client ─────────────────────────────────────────────────────────────────
 _ollama_client = _groq_client = _openai_client = None
 
@@ -72,11 +89,11 @@ def _llm_call(messages, stream=False):
     if _PROVIDER == "ollama":
         return _ollama_client.chat(
             model=_MODEL, messages=messages, stream=stream,
-            options={"num_predict": 80, "temperature": 0.8, "num_ctx": 1024}
+            options={"num_predict": _OLLAMA_NUM_PREDICT, "temperature": 0.8, "num_ctx": 1024}
         )
     client = _groq_client if _PROVIDER == "groq" else _openai_client
     return client.chat.completions.create(
-        model=_MODEL, messages=messages, max_tokens=120, temperature=0.8, stream=stream
+        model=_MODEL, messages=messages, max_tokens=_MAX_TOKENS, temperature=0.8, stream=stream
     )
 
 
@@ -315,7 +332,7 @@ def build_messages(personality, history, user_input, facts=None):
 
     facts_section = ""
     if facts:
-        facts_str = "\n".join(f"- {f}" for f in facts[:10])
+        facts_str = "\n".join(f"- {f}" for f in facts[:_FACTS_LIMIT])
         facts_section = (
             f"\nThings you know about the user "
             f"(weave these in naturally when relevant, never force it):\n{facts_str}\n"
@@ -369,13 +386,13 @@ def chat(user_input, character="female_default"):
     if not personality:
         personality = list(all_personalities.values())[0]
 
-    # Load last 8 interactions for THIS character only
-    cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 8", (character,))
+    # Load recent interactions for THIS character only (latency-tuned)
+    cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT ?", (character, _HISTORY_LIMIT))
     history = cur.fetchall()
 
     # Load long-term user facts and inject into prompt
     facts = [r[0] for r in cur.execute(
-        "SELECT fact FROM facts WHERE character = ? ORDER BY id DESC LIMIT 10", (character,)
+        "SELECT fact FROM facts WHERE character = ? ORDER BY id DESC LIMIT ?", (character, _FACTS_LIMIT)
     ).fetchall()]
     messages = build_messages(personality, history, user_input, facts=facts)
 
@@ -442,13 +459,13 @@ def chat_stream_api():
         if not personality:
             personality = list(all_personalities.values())[0]
 
-        # Load history and build messages (last 8 exchanges)
-        cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT 8", (character,))
+        # Load recent history and build messages (latency-tuned)
+        cur.execute("SELECT user, ai FROM memory WHERE character = ? ORDER BY id DESC LIMIT ?", (character, _HISTORY_LIMIT))
         history = cur.fetchall()
 
         # Load long-term user facts and inject into prompt
         facts = [r[0] for r in cur.execute(
-            "SELECT fact FROM facts WHERE character = ? ORDER BY id DESC LIMIT 10", (character,)
+            "SELECT fact FROM facts WHERE character = ? ORDER BY id DESC LIMIT ?", (character, _FACTS_LIMIT)
         ).fetchall()]
         messages = build_messages(personality, history, user_input, facts=facts)
 
