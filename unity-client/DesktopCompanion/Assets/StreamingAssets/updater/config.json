@@ -1,0 +1,5 @@
+{
+  "manifestUrl": "https://github.com/psanjith/ai-desktop-companion/releases/latest/download/update.json",
+  "autoDownload": true,
+  "startupDelaySeconds": 5
+}

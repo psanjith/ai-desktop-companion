@@ -1,0 +1,96 @@
+name: Build and Release macOS app
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Unity macOS player
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: unity-client/DesktopCompanion
+          targetPlatform: StandaloneOSX
+          buildName: DesktopCompanion
+          buildsPath: build
+
+      - name: Resolve app path
+        id: paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find build -type d -name "DesktopCompanion.app" | head -n 1)"
+          if [[ -z "$APP_PATH" ]]; then
+            echo "DesktopCompanion.app not found"
+            exit 1
+          fi
+
+          echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
+          echo "zip_path=build/DesktopCompanion-mac.zip" >> "$GITHUB_OUTPUT"
+
+      - name: Read Unity bundle version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(grep -E '^  bundleVersion:' unity-client/DesktopCompanion/ProjectSettings/ProjectSettings.asset | head -n1 | awk '{print $2}')
+          if [[ -z "$VERSION" ]]; then VERSION="0.0.0"; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Zip macOS app
+        shell: bash
+        run: |
+          set -euo pipefail
+          ditto -c -k --sequesterRsrc --keepParent "${{ steps.paths.outputs.app_path }}" "${{ steps.paths.outputs.zip_path }}"
+
+      - name: Compute SHA256
+        id: sha
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA=$(shasum -a 256 "${{ steps.paths.outputs.zip_path }}" | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Build update manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="v${{ steps.version.outputs.version }}-${{ github.run_number }}"
+          ZIP_URL="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/DesktopCompanion-mac.zip"
+
+          cat > build/update.json <<EOF
+          {
+            "latestVersion": "${{ steps.version.outputs.version }}",
+            "url": "${ZIP_URL}",
+            "sha256": "${{ steps.sha.outputs.sha256 }}",
+            "mandatory": false,
+            "notes": "Automated release from main (${GITHUB_SHA})"
+          }
+          EOF
+
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: DesktopCompanion ${{ steps.version.outputs.version }} (run ${{ github.run_number }})
+          generate_release_notes: true
+          make_latest: true
+          files: |
+            build/DesktopCompanion-mac.zip
+            build/update.json
