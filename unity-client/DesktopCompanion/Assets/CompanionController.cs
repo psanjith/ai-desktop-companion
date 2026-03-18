@@ -61,6 +61,7 @@ public class CompanionController : MonoBehaviour
     static readonly Color AccentDim   = new Color(0.22f, 0.23f, 0.25f, 0.78f); // pressed
     static readonly Color TextPrimary = new Color(0.92f, 0.93f, 0.98f, 1.00f); // near-white
     static readonly Color TextMuted   = new Color(0.40f, 0.43f, 0.56f, 1.00f); // muted
+    static Sprite RoundedUiSprite;
 
     // Runtime refs to programmatic elements
     private GameObject chatPanel;      // bottom bar
@@ -232,10 +233,75 @@ public class CompanionController : MonoBehaviour
         _bubbleDismissTimer = null;
     }
 
-    // ── Helper: apply Unity's built-in rounded-rect sprite for soft edges ────
+    // ── Helper: robust runtime rounded-rect sprite (works consistently in builds) ──
+    static Sprite GetRoundedUiSprite()
+    {
+        if (RoundedUiSprite != null) return RoundedUiSprite;
+
+        const int size = 64;
+        const int radius = 14;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+
+        var clear = new Color32(255, 255, 255, 0);
+        var solid = new Color32(255, 255, 255, 255);
+
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                bool inside = true;
+
+                // Top-left corner
+                if (x < radius && y >= size - radius)
+                {
+                    float dx = radius - x;
+                    float dy = y - (size - radius - 1);
+                    inside = (dx * dx + dy * dy) <= (radius * radius);
+                }
+                // Top-right corner
+                else if (x >= size - radius && y >= size - radius)
+                {
+                    float dx = x - (size - radius - 1);
+                    float dy = y - (size - radius - 1);
+                    inside = (dx * dx + dy * dy) <= (radius * radius);
+                }
+                // Bottom-left corner
+                else if (x < radius && y < radius)
+                {
+                    float dx = radius - x;
+                    float dy = radius - y;
+                    inside = (dx * dx + dy * dy) <= (radius * radius);
+                }
+                // Bottom-right corner
+                else if (x >= size - radius && y < radius)
+                {
+                    float dx = x - (size - radius - 1);
+                    float dy = radius - y;
+                    inside = (dx * dx + dy * dy) <= (radius * radius);
+                }
+
+                tex.SetPixel(x, y, inside ? solid : clear);
+            }
+        }
+
+        tex.Apply();
+        RoundedUiSprite = Sprite.Create(
+            tex,
+            new Rect(0, 0, size, size),
+            new Vector2(0.5f, 0.5f),
+            100f,
+            0,
+            SpriteMeshType.FullRect,
+            new Vector4(radius, radius, radius, radius)
+        );
+        return RoundedUiSprite;
+    }
+
     static void MakeRounded(Image img)
     {
-        img.sprite = Resources.GetBuiltinResource<Sprite>("UI/Skin/UISprite.psd");
+        img.sprite = GetRoundedUiSprite();
         img.type   = Image.Type.Sliced;
     }
 
