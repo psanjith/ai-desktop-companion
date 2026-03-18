@@ -40,7 +40,6 @@ public class CompanionController : MonoBehaviour
     private const string VoiceOutputPrefKey = "companion_voice_output_enabled";
     private GameObject _voiceToggleButton;
     private TextMeshProUGUI _voiceToggleIcon;
-    private GameObject _controlsHintBadge;
 
     // Speech bubble auto-dismiss
     private Coroutine _bubbleDismissTimer;
@@ -53,13 +52,13 @@ public class CompanionController : MonoBehaviour
     private Coroutine _dotCoroutine; // animated loading dots while waiting for first token
 
     // --- Design tokens ---
-    static readonly Color BgPanel     = new Color(0.05f, 0.06f, 0.11f, 0.82f); // deep navy, translucent
-    static readonly Color BgInput     = new Color(0.10f, 0.11f, 0.17f, 1.00f); // input well
-    static readonly Color BgBubble    = new Color(0.06f, 0.07f, 0.12f, 0.90f); // speech bubble bg
-    static readonly Color BgButton    = new Color(0.13f, 0.14f, 0.21f, 0.90f); // subtle button bg
-    static readonly Color AccentColor = new Color(0.33f, 0.46f, 0.85f, 1.00f); // cool blue, refined
-    static readonly Color AccentHover = new Color(0.43f, 0.56f, 0.92f, 1.00f); // lighter on hover
-    static readonly Color AccentDim   = new Color(0.24f, 0.35f, 0.70f, 1.00f); // pressed
+    static readonly Color BgPanel     = new Color(0.07f, 0.08f, 0.10f, 0.76f); // neutral charcoal panel
+    static readonly Color BgInput     = new Color(0.13f, 0.14f, 0.16f, 0.92f); // darker neutral input well
+    static readonly Color BgBubble    = new Color(0.09f, 0.10f, 0.12f, 0.88f); // neutral speech bubble bg
+    static readonly Color BgButton    = new Color(0.20f, 0.21f, 0.23f, 0.68f); // subtle translucent gray button
+    static readonly Color AccentColor = new Color(0.28f, 0.29f, 0.32f, 0.86f); // grayscale primary action
+    static readonly Color AccentHover = new Color(0.34f, 0.35f, 0.38f, 0.90f); // lighter on hover
+    static readonly Color AccentDim   = new Color(0.22f, 0.23f, 0.25f, 0.78f); // pressed
     static readonly Color TextPrimary = new Color(0.92f, 0.93f, 0.98f, 1.00f); // near-white
     static readonly Color TextMuted   = new Color(0.40f, 0.43f, 0.56f, 1.00f); // muted
 
@@ -109,7 +108,6 @@ public class CompanionController : MonoBehaviour
         BuildBubbleToggle(canvas);
         BuildVoiceToggle(canvas);
         BuildBubbleHiddenBadge(canvas);
-        BuildControlsHintBadge(canvas);
         BuildStatusDot(canvas);
 
         _voiceOutputEnabled = PlayerPrefs.GetInt(VoiceOutputPrefKey, 1) == 1;
@@ -337,8 +335,8 @@ public class CompanionController : MonoBehaviour
         var closeButton = closeBtn.AddComponent<Button>();
         var closeCols = closeButton.colors;
         closeCols.normalColor      = BgButton;
-        closeCols.highlightedColor = new Color(0.20f, 0.22f, 0.32f, 1f);
-        closeCols.pressedColor     = new Color(0.27f, 0.28f, 0.38f, 1f);
+        closeCols.highlightedColor = new Color(0.27f, 0.28f, 0.31f, 0.82f);
+        closeCols.pressedColor     = new Color(0.23f, 0.24f, 0.26f, 0.78f);
         closeCols.fadeDuration     = 0.12f;
         closeButton.colors = closeCols;
         closeButton.onClick.AddListener(OnToggleChat);
@@ -442,8 +440,8 @@ public class CompanionController : MonoBehaviour
             var micBtnComp = micBtn.AddComponent<Button>();
             var micCols = micBtnComp.colors;
             micCols.normalColor      = BgButton;
-            micCols.highlightedColor = new Color(0.20f, 0.22f, 0.32f, 1f);
-            micCols.pressedColor     = new Color(0.27f, 0.28f, 0.38f, 1f);
+            micCols.highlightedColor = new Color(0.27f, 0.28f, 0.31f, 0.82f);
+            micCols.pressedColor     = new Color(0.23f, 0.24f, 0.26f, 0.78f);
             micCols.fadeDuration     = 0.12f;
             micBtnComp.colors = micCols;
             micBtnComp.onClick.AddListener(() => {
@@ -466,7 +464,7 @@ public class CompanionController : MonoBehaviour
             GameObject clrBtn = new GameObject("ClearButton");
             clrBtn.transform.SetParent(chatPanel.transform, false);
             var clrBg = clrBtn.AddComponent<Image>();
-            clrBg.color = new Color(0.18f, 0.10f, 0.10f, 0.90f);
+            clrBg.color = new Color(0.20f, 0.11f, 0.11f, 0.74f);
             MakeRounded(clrBg);
             var clrLE = clrBtn.AddComponent<LayoutElement>();
             clrLE.minWidth = 56f; clrLE.preferredWidth = 56f;
@@ -474,9 +472,9 @@ public class CompanionController : MonoBehaviour
             clrLE.flexibleWidth = 0f;
             var clrBtnComp = clrBtn.AddComponent<Button>();
             var clrCols = clrBtnComp.colors;
-            clrCols.normalColor      = new Color(0.18f, 0.10f, 0.10f, 0.90f);
-            clrCols.highlightedColor = new Color(0.28f, 0.14f, 0.14f, 1f);
-            clrCols.pressedColor     = new Color(0.38f, 0.18f, 0.18f, 1f);
+            clrCols.normalColor      = new Color(0.20f, 0.11f, 0.11f, 0.74f);
+            clrCols.highlightedColor = new Color(0.26f, 0.14f, 0.14f, 0.82f);
+            clrCols.pressedColor     = new Color(0.30f, 0.16f, 0.16f, 0.86f);
             clrCols.fadeDuration     = 0.12f;
             clrBtnComp.colors = clrCols;
             clrBtnComp.onClick.AddListener(() => StartCoroutine(ClearMemory()));
@@ -517,8 +515,8 @@ public class CompanionController : MonoBehaviour
             {
                 var cols = swBtn.colors;
                 cols.normalColor      = BgButton;
-                cols.highlightedColor = new Color(0.20f, 0.22f, 0.32f, 1f);
-                cols.pressedColor     = new Color(0.27f, 0.28f, 0.38f, 1f);
+                cols.highlightedColor = new Color(0.27f, 0.28f, 0.31f, 0.82f);
+                cols.pressedColor     = new Color(0.23f, 0.24f, 0.26f, 0.78f);
                 cols.fadeDuration     = 0.12f;
                 swBtn.colors = cols;
                 // onClick is wired in the Inspector — don't add a second listener here
@@ -623,8 +621,8 @@ public class CompanionController : MonoBehaviour
         var btn = _bubbleToggleButton.AddComponent<Button>();
         var cols = btn.colors;
         cols.normalColor      = BgButton;
-        cols.highlightedColor = new Color(0.20f, 0.22f, 0.32f, 1f);
-        cols.pressedColor     = new Color(0.27f, 0.28f, 0.38f, 1f);
+        cols.highlightedColor = new Color(0.27f, 0.28f, 0.31f, 0.82f);
+        cols.pressedColor     = new Color(0.23f, 0.24f, 0.26f, 0.78f);
         cols.fadeDuration     = 0.08f;
         btn.colors = cols;
         btn.onClick.AddListener(OnToggleBubble);
@@ -667,8 +665,8 @@ public class CompanionController : MonoBehaviour
         var btn = _voiceToggleButton.AddComponent<Button>();
         var cols = btn.colors;
         cols.normalColor      = BgButton;
-        cols.highlightedColor = new Color(0.20f, 0.22f, 0.32f, 1f);
-        cols.pressedColor     = new Color(0.27f, 0.28f, 0.38f, 1f);
+        cols.highlightedColor = new Color(0.27f, 0.28f, 0.31f, 0.82f);
+        cols.pressedColor     = new Color(0.23f, 0.24f, 0.26f, 0.78f);
         cols.fadeDuration     = 0.08f;
         btn.colors = cols;
         btn.onClick.AddListener(OnToggleVoiceOutput);
@@ -721,40 +719,6 @@ public class CompanionController : MonoBehaviour
         label.enableWordWrapping = false;
 
         _bubbleHiddenBadge.SetActive(false);
-    }
-
-    private void BuildControlsHintBadge(Canvas canvas)
-    {
-        if (canvas == null) return;
-
-        _controlsHintBadge = new GameObject("ControlsHintBadge");
-        _controlsHintBadge.transform.SetParent(canvas.transform, false);
-
-        var rect = _controlsHintBadge.AddComponent<RectTransform>();
-        rect.anchorMin = new Vector2(1f, 0f);
-        rect.anchorMax = new Vector2(1f, 0f);
-        rect.pivot     = new Vector2(1f, 0f);
-        rect.anchoredPosition = new Vector2(-232f, 52f);
-        rect.sizeDelta = new Vector2(220f, 26f);
-
-        var bg = _controlsHintBadge.AddComponent<Image>();
-        bg.color = new Color(0.10f, 0.12f, 0.18f, 0.92f);
-        MakeRounded(bg);
-
-        var textObj = new GameObject("Label");
-        textObj.transform.SetParent(_controlsHintBadge.transform, false);
-        var textRect = textObj.AddComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = new Vector2(8f, 0f);
-        textRect.offsetMax = new Vector2(-8f, 0f);
-
-        var label = textObj.AddComponent<TextMeshProUGUI>();
-        label.text = "Chat · Bubble · Voice   |   C:Chat  M:Mic";
-        label.fontSize = 9.5f;
-        label.alignment = TextAlignmentOptions.Center;
-        label.color = new Color(0.78f, 0.84f, 0.96f, 0.95f);
-        label.enableWordWrapping = false;
     }
 
     private void UpdateBubbleHiddenBadgeVisibility()
@@ -922,9 +886,6 @@ public class CompanionController : MonoBehaviour
         // Voice output toggle follows the same HUD visibility rule as bubble toggle
         if (_voiceToggleButton != null)
             _voiceToggleButton.SetActive(!visible);
-
-        if (_controlsHintBadge != null)
-            _controlsHintBadge.SetActive(!visible);
 
         UpdateBubbleHiddenBadgeVisibility();
 
