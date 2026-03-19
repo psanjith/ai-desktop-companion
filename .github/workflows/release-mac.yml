@@ -90,9 +90,24 @@ jobs:
           cp -R "$APP_PATH" "$SNAPSHOT_APP"
 
           (
-            cd "$SNAPSHOT_ROOT"
-            zip -r -0 "$PACKAGE_PATH" "DesktopCompanion.app"
-          )
+            while true; do
+              echo "Packaging still running..."
+              sleep 30
+            done
+          ) &
+          HEARTBEAT_PID=$!
+
+          if ! python3 -c "import os,sys,shutil; app=sys.argv[1]; out=sys.argv[2]; base=os.path.dirname(app); name=os.path.basename(app); stem=out[:-4] if out.endswith('.zip') else out; built=shutil.make_archive(stem,'zip',root_dir=base,base_dir=name); print(f'Archive: {built}')" "$SNAPSHOT_APP" "$PACKAGE_PATH"; then
+            kill "$HEARTBEAT_PID" || true
+            wait "$HEARTBEAT_PID" 2>/dev/null || true
+            echo "Packaging failed"
+            df -h || true
+            ls -lah "$(dirname "$PACKAGE_PATH")" || true
+            exit 1
+          fi
+
+          kill "$HEARTBEAT_PID" || true
+          wait "$HEARTBEAT_PID" 2>/dev/null || true
 
           test -s "$PACKAGE_PATH"
           ls -lh "$PACKAGE_PATH"
