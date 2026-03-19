@@ -46,7 +46,7 @@ jobs:
           echo "Resolved app path: $APP_PATH"
 
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
-          echo "package_path=$GITHUB_WORKSPACE/build/DesktopCompanion-mac.tar" >> "$GITHUB_OUTPUT"
+          echo "package_path=$GITHUB_WORKSPACE/build/DesktopCompanion-mac.zip" >> "$GITHUB_OUTPUT"
 
       - name: Read Unity bundle version
         id: version
@@ -80,13 +80,12 @@ jobs:
           fi
 
           APP_PATH="$(realpath "$APP_PATH")"
-          APP_PARENT="$(dirname "$APP_PATH")"
           APP_NAME="$(basename "$APP_PATH")"
 
           mkdir -p "$(dirname "$PACKAGE_PATH")"
           rm -f "$PACKAGE_PATH"
           echo "Packaging: $APP_PATH"
-          tar -cf "$PACKAGE_PATH" -C "$APP_PARENT" "$APP_NAME"
+          python3 -c "import os,sys,zipfile; app=sys.argv[1]; pkg=sys.argv[2]; name=os.path.basename(app.rstrip('/')); files=[os.path.join(r,f) for r,_,fs in os.walk(app) for f in fs]; z=zipfile.ZipFile(pkg,'w',compression=zipfile.ZIP_STORED,allowZip64=True); [z.write(fp, os.path.join(name, os.path.relpath(fp, app))) for fp in files]; z.close(); print(f'Package written: {pkg} ({len(files)} files)')" "$APP_PATH" "$PACKAGE_PATH"
           ls -lh "$PACKAGE_PATH"
 
       - name: Compute SHA256
@@ -102,7 +101,7 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_TAG="v${{ steps.version.outputs.version }}-${{ github.run_number }}"
-          PACKAGE_URL="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/DesktopCompanion-mac.tar"
+          PACKAGE_URL="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/DesktopCompanion-mac.zip"
 
           cat > build/update.json <<EOF
           {
@@ -124,5 +123,5 @@ jobs:
           generate_release_notes: true
           make_latest: true
           files: |
-            build/DesktopCompanion-mac.tar
+            build/DesktopCompanion-mac.zip
             build/update.json
