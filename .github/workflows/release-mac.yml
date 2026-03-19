@@ -80,37 +80,35 @@ jobs:
           fi
 
           APP_PATH="$(realpath "$APP_PATH")"
-          APP_NAME="$(basename "$APP_PATH")"
 
           mkdir -p "$(dirname "$PACKAGE_PATH")"
           rm -f "$PACKAGE_PATH"
           echo "Packaging: $APP_PATH"
-            cat > /tmp/package_app.py <<'PY'
-      import os
-      import sys
-      import zipfile
+          python3 - "$APP_PATH" "$PACKAGE_PATH" <<'PY'
+import os
+import sys
+import zipfile
 
-      app_path = sys.argv[1]
-      package_path = sys.argv[2]
-      app_name = os.path.basename(app_path.rstrip('/'))
+app_path = sys.argv[1]
+package_path = sys.argv[2]
+app_name = os.path.basename(app_path.rstrip('/'))
 
-      count = 0
-      with zipfile.ZipFile(package_path, 'w', compression=zipfile.ZIP_STORED, allowZip64=True) as zf:
-        for root, _, files in os.walk(app_path):
-          for f in files:
+count = 0
+with zipfile.ZipFile(package_path, 'w', compression=zipfile.ZIP_STORED, allowZip64=True) as zf:
+    for root, _, files in os.walk(app_path):
+        for f in files:
             src = os.path.join(root, f)
             rel = os.path.relpath(src, app_path)
             arc = os.path.join(app_name, rel)
             zf.write(src, arc)
             count += 1
             if count % 1000 == 0:
-              print(f"Packed {count} files...")
+                print(f"Packed {count} files...")
 
-      print(f"Package written: {package_path} ({count} files)")
-      PY
+print(f"Package written: {package_path} ({count} files)")
+PY
 
-            python3 /tmp/package_app.py "$APP_PATH" "$PACKAGE_PATH"
-            test -s "$PACKAGE_PATH"
+          test -s "$PACKAGE_PATH"
           ls -lh "$PACKAGE_PATH"
 
       - name: Compute SHA256
