@@ -132,9 +132,14 @@ public class UpdateManager : MonoBehaviour
         string updatesDir = Path.Combine(Application.persistentDataPath, "updates");
         Directory.CreateDirectory(updatesDir);
 
-        string packageExt = manifest.url != null && manifest.url.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase)
-            ? ".tar.gz"
-            : ".zip";
+        string packageExt = ".zip";
+        if (manifest.url != null)
+        {
+            if (manifest.url.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase))
+                packageExt = ".tar.gz";
+            else if (manifest.url.EndsWith(".tar", StringComparison.OrdinalIgnoreCase))
+                packageExt = ".tar";
+        }
         string packagePath = Path.Combine(updatesDir, $"DesktopCompanion-{manifest.latestVersion}{packageExt}");
         UnityEngine.Debug.Log($"[Updater] Downloading update to: {packagePath}");
 

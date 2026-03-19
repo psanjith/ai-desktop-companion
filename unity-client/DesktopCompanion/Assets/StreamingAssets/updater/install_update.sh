@@ -36,6 +36,8 @@ trap cleanup EXIT
 
 if [[ "$PACKAGE_PATH" == *.tar.gz ]]; then
   tar -xzf "$PACKAGE_PATH" -C "$TMP_DIR"
+elif [[ "$PACKAGE_PATH" == *.tar ]]; then
+  tar -xf "$PACKAGE_PATH" -C "$TMP_DIR"
 elif [[ "$PACKAGE_PATH" == *.zip ]]; then
   unzip -oq "$PACKAGE_PATH" -d "$TMP_DIR"
 else
