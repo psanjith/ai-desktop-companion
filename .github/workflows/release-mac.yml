@@ -36,14 +36,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          APP_PATH="$(find build -type d -name "DesktopCompanion.app" | head -n 1)"
+          APP_PATH="$(find "$GITHUB_WORKSPACE/build" -type d -name "DesktopCompanion.app" | head -n 1)"
           if [[ -z "$APP_PATH" ]]; then
             echo "DesktopCompanion.app not found"
             exit 1
           fi
 
+          APP_PATH="$(realpath "$APP_PATH")"
+          echo "Resolved app path: $APP_PATH"
+
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
-          echo "package_path=build/DesktopCompanion-mac.tar" >> "$GITHUB_OUTPUT"
+          echo "package_path=$GITHUB_WORKSPACE/build/DesktopCompanion-mac.tar" >> "$GITHUB_OUTPUT"
 
       - name: Read Unity bundle version
         id: version
@@ -60,13 +63,31 @@ jobs:
           set -euo pipefail
           APP_PATH="${{ steps.paths.outputs.app_path }}"
           PACKAGE_PATH="${{ steps.paths.outputs.package_path }}"
+
+          APP_PATH="$(echo "$APP_PATH" | xargs)"
+          PACKAGE_PATH="$(echo "$PACKAGE_PATH" | xargs)"
+
+          if [[ ! -d "$APP_PATH" ]]; then
+            echo "Primary app path missing: $APP_PATH"
+            echo "Searching fallback app path..."
+            APP_PATH="$(find "$GITHUB_WORKSPACE/build" -type d -name "DesktopCompanion.app" | head -n 1)"
+          fi
+
+          if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
+            echo "App bundle not found for packaging"
+            find "$GITHUB_WORKSPACE/build" -maxdepth 5 -type d -name "*.app" || true
+            exit 1
+          fi
+
+          APP_PATH="$(realpath "$APP_PATH")"
+          APP_PARENT="$(dirname "$APP_PATH")"
+          APP_NAME="$(basename "$APP_PATH")"
+
           mkdir -p "$(dirname "$PACKAGE_PATH")"
           rm -f "$PACKAGE_PATH"
-          python3 -c "import os,tarfile,sys; app_path=os.environ['APP_PATH']; package_path=os.environ['PACKAGE_PATH']; assert os.path.isdir(app_path), f'App path not found: {app_path}'; app_name=os.path.basename(app_path.rstrip('/')); tf=tarfile.open(package_path,'w'); tf.add(app_path, arcname=app_name, recursive=True); tf.close(); print(f'Wrote {package_path}')"
+          echo "Packaging: $APP_PATH"
+          tar -cf "$PACKAGE_PATH" -C "$APP_PARENT" "$APP_NAME"
           ls -lh "$PACKAGE_PATH"
-        env:
-          APP_PATH: ${{ steps.paths.outputs.app_path }}
-          PACKAGE_PATH: ${{ steps.paths.outputs.package_path }}
 
       - name: Compute SHA256
         id: sha
