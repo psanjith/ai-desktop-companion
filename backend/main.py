@@ -373,7 +373,40 @@ def build_messages(personality, history, user_input, facts=None):
     return messages
 
 
-def chat(user_input, character="female_default"):
+def _generate_tts_bg(text: str, character: str, emotion: str, tts_token: str):
+    """Generate TTS audio in background and store in cache."""
+    try:
+        _, tts, provider = _voice_profile_for(character)
+        
+        if provider == "elevenlabs":
+            try:
+                audio_bytes, _ = _generate_elevenlabs_audio_bytes(text, tts, emotion=emotion)
+            except Exception as exc:
+                print(f"[TTS BG] ElevenLabs failed, trying edge-tts: {exc}")
+                edge_voice = tts.get("edge_tts_voice", "en-US-JennyNeural")
+                try:
+                    audio_bytes = _generate_edge_tts_audio_bytes(text, voice=edge_voice, emotion=emotion, tts=tts)
+                except Exception as edge_exc:
+                    print(f"[TTS BG] edge-tts failed, falling back to gTTS: {edge_exc}")
+                    audio_bytes = _generate_gtts_audio_bytes(text)
+        else:
+            # For macOS, we skip audio generation and just signal that text is ready
+            # (macOS will handle playback via /speak endpoint if needed)
+            audio_bytes = None
+        
+        if audio_bytes:
+            with _tts_audio_cache_lock:
+                if tts_token in _tts_audio_cache:
+                    _tts_audio_cache[tts_token]["audio"] = audio_bytes
+                    _tts_audio_cache[tts_token]["ready"] = True
+                    print(f"[TTS BG] Audio ready for token {tts_token}")
+    except Exception as e:
+        print(f"[TTS BG] Error generating audio: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+def chat(user_input, character="female_default", generate_tts=False):
     conn = get_db()
     cur = conn.cursor()
 
@@ -419,7 +452,27 @@ def chat(user_input, character="female_default"):
     if len(user_input) > 15:
         threading.Thread(target=_extract_facts_bg, args=(character, user_input), daemon=True).start()
 
-    return clean_reply, emotes, emotion_from_tag
+    # Pre-allocate a TTS token and generate audio in background if requested
+    tts_token = None
+    if generate_tts:
+        emotion = emotion_from_tag or detect_emotion(clean_reply, emotes)
+        text_for_tts = _clean_tts_text(clean_reply)
+        tts_token = uuid.uuid4().hex
+        with _tts_audio_cache_lock:
+            _tts_audio_cache[tts_token] = {
+                "audio": None,
+                "ready": False,
+                "mime": "audio/mpeg",
+                "expires_at": time.time() + _TTS_AUDIO_TTL_SECONDS,
+            }
+        # Start TTS generation in background thread
+        threading.Thread(
+            target=_generate_tts_bg,
+            args=(text_for_tts, character, emotion, tts_token),
+            daemon=True
+        ).start()
+
+    return clean_reply, emotes, emotion_from_tag, tts_token
 
 
 @app.route("/chat", methods=["POST"])
@@ -428,11 +481,27 @@ def chat_api():
         data = request.get_json()
         user_input = data.get("message", "")
         character = data.get("character", "female_default")
+        generate_tts = data.get("tts", False)  # Request TTS async generation
+        
         if not user_input:
             return jsonify({"error": "No message provided"}), 400
-        reply, emotes, emotion_tag = chat(user_input, character)
+        
+        reply, emotes, emotion_tag, tts_token = chat(user_input, character, generate_tts=generate_tts)
         emotion = emotion_tag or detect_emotion(reply, emotes)
-        return jsonify({"reply": reply, "emotes": emotes, "emotion": emotion})
+        
+        result = {
+            "reply": reply,
+            "emotes": emotes,
+            "emotion": emotion,
+        }
+        
+        # If TTS was requested, provide the token for polling/downloading
+        if tts_token:
+            base = request.host_url.rstrip("/").replace("http://", "https://")
+            result["tts_token"] = tts_token
+            result["audio_url"] = base + f"/speak/audio/{tts_token}.mp3"
+        
+        return jsonify(result)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -783,10 +852,34 @@ def speak_audio(token: str):
     """One-time downloadable TTS audio for client-side playback."""
     with _tts_audio_cache_lock:
         _purge_tts_audio_cache()
-        item = _tts_audio_cache.pop(token, None)
+        item = _tts_audio_cache.get(token)
+    
     if not item:
         return jsonify({"ok": False, "error": "Audio not found or expired"}), 404
+    
+    # Return 202 Accepted if audio is still being generated
+    if not item.get("ready") or item.get("audio") is None:
+        return jsonify({"ok": False, "status": "processing", "note": "Audio is still being generated"}), 202
+    
+    # Remove from cache after serving
+    with _tts_audio_cache_lock:
+        _tts_audio_cache.pop(token, None)
+    
     return Response(item["audio"], mimetype=item["mime"])
+
+
+@app.route("/speak/status/<token>", methods=["GET"])
+def speak_status(token: str):
+    """Check if TTS audio is ready without downloading it."""
+    with _tts_audio_cache_lock:
+        _purge_tts_audio_cache()
+        item = _tts_audio_cache.get(token)
+    
+    if not item:
+        return jsonify({"ready": False, "error": "Token not found or expired"}), 404
+    
+    ready = item.get("ready", False) and item.get("audio") is not None
+    return jsonify({"ready": ready, "token": token})
 
 
 @app.route("/debug/tts-key", methods=["GET"])
