@@ -66,8 +66,28 @@ jobs:
           mkdir -p "$(dirname "$PACKAGE_PATH")"
           rm -f "$PACKAGE_PATH"
           echo "Packaging $APP_NAME from $APP_DIR"
-          (cd "$APP_DIR" && tar -czf "$GITHUB_WORKSPACE/$PACKAGE_PATH" "$APP_NAME")
+          echo "pwd=$(pwd)"
+          echo "APP_PATH=$APP_PATH"
+          echo "PACKAGE_PATH=$PACKAGE_PATH"
+          test -d "$APP_PATH"
+
+          if ! tar -C "$APP_DIR" -czf "$PACKAGE_PATH" "$APP_NAME"; then
+            echo "tar failed; falling back to python tarfile writer"
+            python3 - <<'PY'
+import os, tarfile
+app_path = os.environ['APP_PATH']
+package_path = os.environ['PACKAGE_PATH']
+app_dir = os.path.dirname(app_path)
+app_name = os.path.basename(app_path)
+with tarfile.open(package_path, 'w:gz') as tf:
+    tf.add(os.path.join(app_dir, app_name), arcname=app_name, recursive=True)
+print(f"Wrote {package_path}")
+PY
+          fi
           ls -lh "$PACKAGE_PATH"
+        env:
+          APP_PATH: ${{ steps.paths.outputs.app_path }}
+          PACKAGE_PATH: ${{ steps.paths.outputs.package_path }}
 
       - name: Compute SHA256
         id: sha
