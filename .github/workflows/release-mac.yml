@@ -85,38 +85,14 @@ jobs:
           rm -f "$PACKAGE_PATH"
           echo "Packaging: $APP_PATH"
 
-            SNAPSHOT_ROOT="$(mktemp -d)"
-            SNAPSHOT_APP="$SNAPSHOT_ROOT/DesktopCompanion.app"
-            cp -R "$APP_PATH" "$SNAPSHOT_APP"
+          SNAPSHOT_ROOT="$(mktemp -d)"
+          SNAPSHOT_APP="$SNAPSHOT_ROOT/DesktopCompanion.app"
+          cp -R "$APP_PATH" "$SNAPSHOT_APP"
 
-            python3 - "$SNAPSHOT_APP" "$PACKAGE_PATH" <<'PY'
-      import os
-      import sys
-      import zipfile
-
-      app_path = sys.argv[1]
-      package_path = sys.argv[2]
-      app_name = os.path.basename(app_path.rstrip('/'))
-
-      written = 0
-      skipped = 0
-
-      with zipfile.ZipFile(package_path, 'w', compression=zipfile.ZIP_STORED, allowZip64=True) as zf:
-        for root, _, files in os.walk(app_path):
-          for f in files:
-            src = os.path.join(root, f)
-            rel = os.path.relpath(src, app_path)
-            arc = os.path.join(app_name, rel)
-            try:
-              zf.write(src, arc)
-              written += 1
-              if written % 1000 == 0:
-                print(f"Packed {written} files...")
-            except FileNotFoundError:
-              skipped += 1
-
-      print(f"Package written: {package_path} ({written} files, skipped {skipped})")
-      PY
+          (
+            cd "$SNAPSHOT_ROOT"
+            zip -r -0 "$PACKAGE_PATH" "DesktopCompanion.app"
+          )
 
           test -s "$PACKAGE_PATH"
           ls -lh "$PACKAGE_PATH"
