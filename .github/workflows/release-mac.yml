@@ -65,7 +65,9 @@ jobs:
 
           mkdir -p "$(dirname "$ZIP_PATH")"
           rm -f "$ZIP_PATH"
-          (cd "$APP_DIR" && zip -qry "$GITHUB_WORKSPACE/$ZIP_PATH" "$APP_NAME")
+          echo "Packaging $APP_NAME from $APP_DIR"
+          (cd "$APP_DIR" && zip -ry "$GITHUB_WORKSPACE/$ZIP_PATH" "$APP_NAME")
+          ls -lh "$ZIP_PATH"
 
       - name: Compute SHA256
         id: sha
