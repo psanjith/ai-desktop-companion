@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
@@ -55,14 +58,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ditto -c -k --sequesterRsrc --keepParent "${{ steps.paths.outputs.app_path }}" "${{ steps.paths.outputs.zip_path }}"
+          APP_PATH="${{ steps.paths.outputs.app_path }}"
+          ZIP_PATH="${{ steps.paths.outputs.zip_path }}"
+          APP_DIR="$(dirname "$APP_PATH")"
+          APP_NAME="$(basename "$APP_PATH")"
+
+          mkdir -p "$(dirname "$ZIP_PATH")"
+          rm -f "$ZIP_PATH"
+          (cd "$APP_DIR" && zip -qry "$GITHUB_WORKSPACE/$ZIP_PATH" "$APP_NAME")
 
       - name: Compute SHA256
         id: sha
         shell: bash
         run: |
           set -euo pipefail
-          SHA=$(shasum -a 256 "${{ steps.paths.outputs.zip_path }}" | awk '{print $1}')
+          SHA=$(sha256sum "${{ steps.paths.outputs.zip_path }}" | awk '{print $1}')
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Build update manifest
