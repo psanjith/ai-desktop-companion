@@ -132,13 +132,16 @@ public class UpdateManager : MonoBehaviour
         string updatesDir = Path.Combine(Application.persistentDataPath, "updates");
         Directory.CreateDirectory(updatesDir);
 
-        string zipPath = Path.Combine(updatesDir, $"DesktopCompanion-{manifest.latestVersion}.zip");
-        UnityEngine.Debug.Log($"[Updater] Downloading update to: {zipPath}");
+        string packageExt = manifest.url != null && manifest.url.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase)
+            ? ".tar.gz"
+            : ".zip";
+        string packagePath = Path.Combine(updatesDir, $"DesktopCompanion-{manifest.latestVersion}{packageExt}");
+        UnityEngine.Debug.Log($"[Updater] Downloading update to: {packagePath}");
 
         using (var req = UnityWebRequest.Get(manifest.url))
         {
             req.timeout = 120;
-            req.downloadHandler = new DownloadHandlerFile(zipPath);
+            req.downloadHandler = new DownloadHandlerFile(packagePath);
             yield return req.SendWebRequest();
 
             if (req.result != UnityWebRequest.Result.Success)
@@ -150,7 +153,7 @@ public class UpdateManager : MonoBehaviour
 
         if (!string.IsNullOrWhiteSpace(manifest.sha256))
         {
-            string actual = ComputeSha256(zipPath);
+            string actual = ComputeSha256(packagePath);
             if (!string.Equals(actual, manifest.sha256.Trim(), StringComparison.OrdinalIgnoreCase))
             {
                 UnityEngine.Debug.LogWarning($"[Updater] SHA256 mismatch. expected={manifest.sha256} actual={actual}");
@@ -174,7 +177,7 @@ public class UpdateManager : MonoBehaviour
 
         TryChmodExecutable(installerScript);
 
-        string args = $"\"{installerScript}\" \"{appPath}\" \"{zipPath}\" \"{Path.GetFileNameWithoutExtension(appPath)}\"";
+        string args = $"\"{installerScript}\" \"{appPath}\" \"{packagePath}\" \"{Path.GetFileNameWithoutExtension(appPath)}\"";
 
         try
         {

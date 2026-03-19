@@ -43,7 +43,7 @@ jobs:
           fi
 
           echo "app_path=$APP_PATH" >> "$GITHUB_OUTPUT"
-          echo "zip_path=build/DesktopCompanion-mac.zip" >> "$GITHUB_OUTPUT"
+          echo "package_path=build/DesktopCompanion-mac.tar.gz" >> "$GITHUB_OUTPUT"
 
       - name: Read Unity bundle version
         id: version
@@ -54,27 +54,27 @@ jobs:
           if [[ -z "$VERSION" ]]; then VERSION="0.0.0"; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Zip macOS app
+      - name: Package macOS app
         shell: bash
         run: |
           set -euo pipefail
           APP_PATH="${{ steps.paths.outputs.app_path }}"
-          ZIP_PATH="${{ steps.paths.outputs.zip_path }}"
+          PACKAGE_PATH="${{ steps.paths.outputs.package_path }}"
           APP_DIR="$(dirname "$APP_PATH")"
           APP_NAME="$(basename "$APP_PATH")"
 
-          mkdir -p "$(dirname "$ZIP_PATH")"
-          rm -f "$ZIP_PATH"
+          mkdir -p "$(dirname "$PACKAGE_PATH")"
+          rm -f "$PACKAGE_PATH"
           echo "Packaging $APP_NAME from $APP_DIR"
-          (cd "$APP_DIR" && zip -ry "$GITHUB_WORKSPACE/$ZIP_PATH" "$APP_NAME")
-          ls -lh "$ZIP_PATH"
+          (cd "$APP_DIR" && tar -czf "$GITHUB_WORKSPACE/$PACKAGE_PATH" "$APP_NAME")
+          ls -lh "$PACKAGE_PATH"
 
       - name: Compute SHA256
         id: sha
         shell: bash
         run: |
           set -euo pipefail
-          SHA=$(sha256sum "${{ steps.paths.outputs.zip_path }}" | awk '{print $1}')
+          SHA=$(sha256sum "${{ steps.paths.outputs.package_path }}" | awk '{print $1}')
           echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Build update manifest
@@ -82,12 +82,12 @@ jobs:
         run: |
           set -euo pipefail
           RELEASE_TAG="v${{ steps.version.outputs.version }}-${{ github.run_number }}"
-          ZIP_URL="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/DesktopCompanion-mac.zip"
+          PACKAGE_URL="https://github.com/${{ github.repository }}/releases/download/${RELEASE_TAG}/DesktopCompanion-mac.tar.gz"
 
           cat > build/update.json <<EOF
           {
             "latestVersion": "${{ steps.version.outputs.version }}",
-            "url": "${ZIP_URL}",
+            "url": "${PACKAGE_URL}",
             "sha256": "${{ steps.sha.outputs.sha256 }}",
             "mandatory": false,
             "notes": "Automated release from main (${GITHUB_SHA})"
@@ -104,5 +104,5 @@ jobs:
           generate_release_notes: true
           make_latest: true
           files: |
-            build/DesktopCompanion-mac.zip
+            build/DesktopCompanion-mac.tar.gz
             build/update.json

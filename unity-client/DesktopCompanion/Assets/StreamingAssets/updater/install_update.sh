@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_PATH="$1"
-ZIP_PATH="$2"
+PACKAGE_PATH="$2"
 APP_NAME="$3"
 
 LOG_DIR="$HOME/Library/Logs/DesktopCompanion"
@@ -13,10 +13,10 @@ exec >> "$LOG_FILE" 2>&1
 
 echo "==== $(date) : updater started ===="
 echo "APP_PATH=$APP_PATH"
-echo "ZIP_PATH=$ZIP_PATH"
+echo "PACKAGE_PATH=$PACKAGE_PATH"
 
-if [[ ! -f "$ZIP_PATH" ]]; then
-  echo "zip not found, aborting"
+if [[ ! -f "$PACKAGE_PATH" ]]; then
+  echo "package not found, aborting"
   exit 1
 fi
 
@@ -34,7 +34,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-unzip -oq "$ZIP_PATH" -d "$TMP_DIR"
+if [[ "$PACKAGE_PATH" == *.tar.gz ]]; then
+  tar -xzf "$PACKAGE_PATH" -C "$TMP_DIR"
+elif [[ "$PACKAGE_PATH" == *.zip ]]; then
+  unzip -oq "$PACKAGE_PATH" -d "$TMP_DIR"
+else
+  echo "unsupported package format: $PACKAGE_PATH"
+  exit 1
+fi
+
 NEW_APP="$(find "$TMP_DIR" -maxdepth 3 -type d -name "*.app" | head -n 1)"
 
 if [[ -z "$NEW_APP" ]]; then
